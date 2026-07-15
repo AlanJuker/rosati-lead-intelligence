@@ -104,7 +104,11 @@ class ClickUpTestCase(unittest.TestCase):
 
         with patch.dict(
             os.environ,
-            {"CLICKUP_API_TOKEN": "pk_invalido", "CLICKUP_LIST_ID": "123456"},
+            {
+                "CLICKUP_API_TOKEN": "pk_invalido",
+                "CLICKUP_LIST_ID": "123456",
+                "CLICKUP_ASSIGNEES": "789:Comercial Prueba",
+            },
             clear=False,
         ):
             with httpx.Client(transport=httpx.MockTransport(responder)) as cliente:

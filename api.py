@@ -41,9 +41,61 @@ FUENTES = ["Instagram Ads", "Facebook Ads", "Formulario Web"]
 DIMENSIONES_BANT = ["budget", "authority", "need", "timeline"]
 
 
+def _sincronizar_pendientes_clickup() -> dict:
+    """Crea al arrancar las tareas faltantes y evita duplicados por task_id."""
+    if not clickup_configurado():
+        log.info("ClickUp no está configurado; se omite la sincronización inicial")
+        return {"creados": 0, "errores": 0, "pendientes": 0}
+
+    pendientes = db.listar_pendientes_clickup()
+    creados = errores = 0
+    for lead in pendientes:
+        entrada = {
+            "fuente": lead.fuente,
+            "fecha": lead.fecha,
+            "nombre": lead.nombre,
+            "telefono": lead.telefono,
+            "email": lead.email,
+            "ciudad_o_ubicacion": lead.ciudad_o_ubicacion,
+            "modelo_interes": lead.modelo_interes,
+            "mensaje_o_comentario": lead.mensaje_o_comentario,
+            "datos_adicionales_perfil": lead.datos_adicionales_perfil,
+        }
+        calificacion = {
+            "clasificacion": lead.clasificacion,
+            "puntaje_total": lead.puntaje_total,
+            "puntajes": lead.puntajes,
+            "showroom_recomendado": lead.showroom_recomendado,
+            "señales_clave": lead.senales_clave,
+            "accion_recomendada": lead.accion_recomendada,
+        }
+        crm = {"sla": lead.sla}
+        resultado = crear_tarea_lead(
+            entrada,
+            calificacion,
+            crm,
+            lead.id,
+            indice_asignacion=(
+                db.numero_asignacion_semilla(lead.id)
+                if lead.motor == "semilla"
+                else db.numero_asignacion_comercial(lead.id)
+            ),
+        )
+        db.actualizar_clickup(lead.id, resultado)
+        if resultado["estado"] == "creado":
+            creados += 1
+        else:
+            errores += 1
+
+    if pendientes:
+        log.info("Sincronización ClickUp: %s creados, %s errores", creados, errores)
+    return {"creados": creados, "errores": errores, "pendientes": len(pendientes)}
+
+
 @asynccontextmanager
 async def _ciclo_de_vida(app: FastAPI):
     db.iniciar_db()
+    _sincronizar_pendientes_clickup()
     yield
 
 

@@ -247,6 +247,35 @@ def numero_asignacion_comercial(lead_id: int) -> int:
         ) or 1
 
 
+def numero_asignacion_semilla(lead_id: int) -> int:
+    """Posición estable de un lead semilla para conservar su responsable al reintentar."""
+    with Session(engine) as sesion:
+        return sesion.scalar(
+            select(func.count(Lead.id)).where(
+                Lead.id <= lead_id,
+                Lead.clasificacion.in_(("HOT", "WARM")),
+                Lead.motor == "semilla",
+            )
+        ) or 1
+
+
+def listar_pendientes_clickup() -> list[Lead]:
+    """Leads accionables que todavía no tienen una tarea confirmada."""
+    consulta = (
+        select(Lead)
+        .where(
+            Lead.clasificacion.in_(("HOT", "WARM")),
+            Lead.clickup_task_id.is_(None),
+        )
+        .order_by(Lead.id.asc())
+    )
+    with Session(engine) as sesion:
+        leads = list(sesion.scalars(consulta))
+        for lead in leads:
+            sesion.expunge(lead)
+        return leads
+
+
 def obtener_lead(lead_id: int) -> Lead | None:
     with Session(engine) as sesion:
         lead = sesion.get(Lead, lead_id)

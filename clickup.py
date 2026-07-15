@@ -12,8 +12,12 @@ CLASIFICACIONES_ENVIABLES = {"HOT", "WARM"}
 
 
 def clickup_configurado() -> bool:
-    """Indica si existen las dos credenciales mínimas para crear tareas."""
-    return bool(os.environ.get("CLICKUP_API_TOKEN") and os.environ.get("CLICKUP_LIST_ID"))
+    """Indica si existen credenciales, Lista y al menos un responsable."""
+    return bool(
+        os.environ.get("CLICKUP_API_TOKEN")
+        and os.environ.get("CLICKUP_LIST_ID")
+        and (os.environ.get("CLICKUP_ASSIGNEES") or os.environ.get("CLICKUP_ASSIGNEE_ID"))
+    )
 
 
 def _comerciales_configurados() -> list[dict]:
@@ -136,8 +140,9 @@ def crear_tarea_lead(
         comerciales_asignados = _seleccionar_comerciales(indice_asignacion or lead_db_id)
     except ValueError as error:
         return {"estado": "error", "detalle": str(error)}
-    if comerciales_asignados:
-        payload["assignees"] = [comercial["id"] for comercial in comerciales_asignados]
+    if not comerciales_asignados:
+        return {"estado": "no_configurado", "motivo": "Falta CLICKUP_ASSIGNEES"}
+    payload["assignees"] = [comercial["id"] for comercial in comerciales_asignados]
     status = os.environ.get("CLICKUP_STATUS", "").strip()
     if status:
         payload["status"] = status

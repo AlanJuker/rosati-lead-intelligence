@@ -65,7 +65,7 @@ automotriz, pensada para demos con clientes y desplegada en Railway.
   calificación en vivo con animaciones. Tema oscuro oro/carbono, responsive.
 - Configuración de Railway (railway.json + Procfile + healthcheck) y PostgreSQL documentado.
 - Integración ClickUp para HOT/WARM con trazabilidad visible en el expediente.
-- Pruebas automatizadas con `unittest` (8 casos, sin consumo de Claude ni ClickUp real).
+- Pruebas automatizadas con `unittest` (9 casos, sin consumo de Claude ni ClickUp real).
 - Workflow n8n validado como JSON.
 
 ## Estado: qué NO está hecho / pendiente ⏳

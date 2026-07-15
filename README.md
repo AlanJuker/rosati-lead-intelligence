@@ -72,6 +72,8 @@ Después de guardar cada lead, la aplicación crea una tarea en ClickUp únicame
 clasificaciones **HOT** y **WARM**. Un HOT se crea con prioridad urgente y vencimiento en
 2 horas; un WARM, con prioridad alta y vencimiento en 24 horas. Un fallo de ClickUp nunca
 impide guardar el lead en PostgreSQL y queda registrado en su expediente.
+Al arrancar, también sincroniza los HOT/WARM de la campaña demo que aún no tengan
+`clickup_task_id`; las tareas ya confirmadas no se duplican en reinicios posteriores.
 
 Configura estas variables en **Railway → servicio web → Variables**:
 
