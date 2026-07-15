@@ -35,8 +35,11 @@ class LeadEntrada(BaseModel):
 def calificar_lead(lead: LeadEntrada) -> CalificacionLead:
     try:
         return clasificar_lead(lead.model_dump())
+    except TypeError:
+        # El SDK lanza TypeError cuando no hay ninguna credencial configurada
+        raise HTTPException(status_code=500, detail="ANTHROPIC_API_KEY no configurada en el servidor")
     except anthropic.AuthenticationError:
-        raise HTTPException(status_code=500, detail="ANTHROPIC_API_KEY inválida o ausente")
+        raise HTTPException(status_code=500, detail="ANTHROPIC_API_KEY inválida")
     except anthropic.RateLimitError:
         raise HTTPException(status_code=429, detail="Límite de tasa de la API de Anthropic; reintentar")
     except anthropic.APIStatusError as e:
