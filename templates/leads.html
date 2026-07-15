@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block titulo %}Pipeline · Rosati Motors · Lead Intelligence{% endblock %}
+{% block contenido %}
+
+<div class="encabezado">
+  <div>
+    <span class="sobrelinea">Pipeline</span>
+    <h1>Leads calificados</h1>
+    <p>Todos los leads del pipeline con su calificación BANT y asignación comercial.</p>
+  </div>
+  <a class="boton-oro" href="/nuevo">Calificar un lead →</a>
+</div>
+
+<form class="filtros" method="get" action="/leads">
+  <select name="clasificacion" aria-label="Filtrar por clasificación">
+    <option value="">Todas las clasificaciones</option>
+    {% for c in clasificaciones %}
+    <option value="{{ c }}" {{ 'selected' if filtro_clasificacion == c }}>{{ c }}</option>
+    {% endfor %}
+  </select>
+  <select name="fuente" aria-label="Filtrar por fuente">
+    <option value="">Todas las fuentes</option>
+    {% for f in fuentes %}
+    <option value="{{ f }}" {{ 'selected' if filtro_fuente == f }}>{{ f }}</option>
+    {% endfor %}
+  </select>
+  <input type="search" name="q" value="{{ filtro_q }}" placeholder="Buscar por nombre, modelo o mensaje…" aria-label="Buscar">
+  <button class="boton-fantasma" type="submit">Filtrar</button>
+  {% if filtro_clasificacion or filtro_fuente or filtro_q %}
+  <a class="boton-fantasma" href="/leads">Limpiar</a>
+  {% endif %}
+</form>
+
+<div class="tarjeta" style="padding: 8px 0 0;">
+  <div class="tabla-envoltura">
+    <table class="tabla">
+      <thead>
+        <tr>
+          <th>Lead</th><th>Fuente</th><th>Modelo de interés</th><th>Showroom</th>
+          <th>BANT</th><th>Clasificación</th><th>Asignado a</th><th>Motor</th><th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for lead in leads %}
+        <tr class="fila-enlace" onclick="location.href='/leads/{{ lead.id }}'">
+          <td class="celda-nombre">{{ lead.nombre }}<small>{{ lead.fecha }}</small></td>
+          <td class="silencio">{{ lead.fuente }}</td>
+          <td>{{ lead.modelo_interes or '—' }}</td>
+          <td class="silencio">{{ lead.showroom_recomendado }}</td>
+          <td class="celda-puntaje">{{ lead.puntaje_total }}<small>/100</small></td>
+          <td><span class="pastilla {{ lead.clasificacion }}">{{ lead.clasificacion }}</span></td>
+          <td>{{ lead.asesor }}</td>
+          <td><span class="insignia-motor {{ 'claude' if lead.motor == 'claude' }}">{{ {'claude': '✦ Claude', 'simulador': 'Simulador', 'semilla': 'Histórico'}[lead.motor] }}</span></td>
+          <td><a class="ver" href="/leads/{{ lead.id }}">Ver →</a></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="9" class="vacio-tabla">No hay leads que coincidan con los filtros.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% endblock %}

@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+{% block titulo %}Panel · Rosati Motors · Lead Intelligence{% endblock %}
+{% block contenido %}
+
+<div class="encabezado">
+  <div>
+    <span class="sobrelinea">Panel comercial</span>
+    <h1>Cada lead, en manos<br>del asesor correcto.</h1>
+    <p>Calificación BANT automática de los leads de Instagram, Facebook y el formulario web,
+       con enrutamiento inmediato al equipo de ventas.</p>
+  </div>
+  <a class="boton-oro" href="/nuevo">Calificar un lead →</a>
+</div>
+
+<section class="rejilla-metricas" aria-label="Métricas generales">
+  <div class="tarjeta metrica">
+    <div class="etiqueta">Leads totales</div>
+    <div class="valor">{{ stats.total }}</div>
+    <div class="detalle">en el pipeline</div>
+  </div>
+  <div class="tarjeta metrica">
+    <div class="etiqueta">Leads HOT</div>
+    <div class="valor">{{ stats.por_clasificacion.HOT }}</div>
+    <div class="detalle"><b>SLA:</b> contacto en &lt; 2 horas</div>
+  </div>
+  <div class="tarjeta metrica">
+    <div class="etiqueta">Accionables</div>
+    <div class="valor">{{ stats.tasa_accionables }}<small>%</small></div>
+    <div class="detalle">{{ stats.accionables }} leads HOT + WARM</div>
+  </div>
+  <div class="tarjeta metrica">
+    <div class="etiqueta">Puntaje promedio</div>
+    <div class="valor">{{ stats.promedio_total }}<small>/100</small></div>
+    <div class="detalle">metodología BANT</div>
+  </div>
+</section>
+
+<section class="rejilla-graficos">
+  <div class="tarjeta">
+    <h2>Leads por día</h2>
+    <p class="subtitulo">Últimos 14 días de captura</p>
+    <div class="grafico-columnas" role="img"
+         aria-label="Leads por día en los últimos 14 días: {% for p in serie %}{{ p.etiqueta }}: {{ p.valor }}{{ ', ' if not loop.last }}{% endfor %}">
+      {% for p in serie %}
+      <div class="col" title="{{ p.fecha }}: {{ p.valor }} lead{{ 's' if p.valor != 1 }}">
+        <span class="cifra">{{ p.valor if p.valor else '' }}</span>
+        <div class="barra-v {{ 'vacia' if not p.valor }}" style="height: {{ [p.pct, 2] | max }}%"></div>
+      </div>
+      {% endfor %}
+    </div>
+    <div class="eje-x" aria-hidden="true">
+      {% for p in serie %}<span>{{ p.etiqueta }}</span>{% endfor %}
+    </div>
+  </div>
+
+  <div class="columna">
+    <div class="tarjeta">
+      <h2>Distribución por clasificación</h2>
+      <p class="subtitulo">{{ stats.total }} leads calificados</p>
+      <div class="grafico-filas">
+        {% for d in distribucion %}
+        <div class="fila-dato" title="{{ d.nombre }}: {{ d.valor }} leads ({{ d.pct }}%)">
+          <span class="nombre"><span class="pastilla {{ d.nombre }}">{{ d.nombre }}</span></span>
+          <div class="pista"><div class="relleno relleno-{{ d.nombre }}" style="width: {{ [d.pct, 2] | max }}%"></div></div>
+          <span class="cifra"><b>{{ d.valor }}</b> · {{ d.pct }}%</span>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="tarjeta">
+      <h2>Promedio BANT por dimensión</h2>
+      <p class="subtitulo">Sobre 25 puntos posibles</p>
+      <div class="grafico-filas">
+        {% for b in bant %}
+        <div class="fila-dato" title="{{ b.nombre | title }}: promedio {{ b.valor }} de 25">
+          <span class="nombre">{{ b.nombre | upper }}</span>
+          <div class="pista"><div class="relleno relleno-oro" style="width: {{ [b.pct, 2] | max }}%"></div></div>
+          <span class="cifra"><b>{{ b.valor }}</b> / 25</span>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="rejilla-graficos" style="grid-template-columns: 1fr .38fr;">
+  <div class="tarjeta">
+    <h2>Leads recientes</h2>
+    <p class="subtitulo">Los últimos ingresos al pipeline</p>
+    <div class="tabla-envoltura">
+      <table class="tabla">
+        <thead>
+          <tr><th>Lead</th><th>Fuente</th><th>Modelo de interés</th><th>BANT</th><th>Clasificación</th><th></th></tr>
+        </thead>
+        <tbody>
+          {% for lead in recientes %}
+          <tr class="fila-enlace" onclick="location.href='/leads/{{ lead.id }}'">
+            <td class="celda-nombre">{{ lead.nombre }}<small>{{ lead.fecha }}</small></td>
+            <td class="silencio">{{ lead.fuente }}</td>
+            <td>{{ lead.modelo_interes or '—' }}</td>
+            <td class="celda-puntaje">{{ lead.puntaje_total }}<small>/100</small></td>
+            <td><span class="pastilla {{ lead.clasificacion }}">{{ lead.clasificacion }}</span></td>
+            <td><a class="ver" href="/leads/{{ lead.id }}">Ver →</a></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="tarjeta">
+    <h2>Por fuente</h2>
+    <p class="subtitulo">Origen de los leads</p>
+    <div class="lista-fuentes">
+      {% for fuente, cuenta in stats.por_fuente.items() %}
+      <div class="item"><span>{{ fuente }}</span><b>{{ cuenta }}</b></div>
+      {% else %}
+      <div class="item"><span>Sin datos aún</span></div>
+      {% endfor %}
+    </div>
+    <p class="subtitulo" style="margin: 22px 0 10px;">Enrutamiento activo</p>
+    <div class="lista-fuentes">
+      <div class="item"><span>🔴 HOT → Asesora senior</span><b>&lt; 2 h</b></div>
+      <div class="item"><span>🟠 WARM → Asesora comercial</span><b>&lt; 24 h</b></div>
+      <div class="item"><span>🔵 COLD → Nutrición</span><b>14 días</b></div>
+      <div class="item"><span>⚪ DESCARTAR → Remarketing</span><b>—</b></div>
+    </div>
+  </div>
+</section>
+
+{% endblock %}

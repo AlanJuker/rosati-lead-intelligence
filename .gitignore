@@ -7,6 +7,9 @@ venv/
 # Entorno / secretos
 .env
 
+# Base de datos local (se regenera desde datos_semilla.json)
+data/
+
 # IDE
 .vscode/
 .idea/

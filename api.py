@@ -1,99 +1,127 @@
-"""API webhook de calificación de leads BANT — Rosati Motors.
+"""Rosati Motors · Lead Intelligence — aplicación web + API BANT.
 
-Pensada para recibir leads desde el CRM, Meta Lead Ads, n8n, Zapier o Make
-y devolver la calificación que dispara la asignación automática al asesor.
+Superficie:
+  Web (HTML): /            panel con métricas y gráficos
+              /leads       pipeline con filtros
+              /leads/{id}  expediente de un lead
+              /nuevo       captura y calificación en vivo
+  JSON:       POST /calificar-lead   contrato de la spec (Claude, para n8n/CRM)
+              POST /demo/calificar   simulador sin API key (compatibilidad demo)
+              POST /api/leads        califica con el mejor motor disponible y persiste
+              GET  /api/leads        lista de leads
+              GET  /api/estadisticas agregados del panel
+              GET  /salud            healthcheck (usado por Railway)
 
 Ejecutar:  uvicorn api:app --reload
 """
 
-import re
-import unicodedata
+import logging
+import os
+from contextlib import asynccontextmanager
+from datetime import date, timedelta
 from pathlib import Path
 
 import anthropic
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse
-from pydantic import BaseModel
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+from pydantic import BaseModel, Field, field_validator
 
+import db
 from clasificador import CalificacionLead, clasificar_lead
+from simulador import asignacion_crm, calificar_simulado
+
+log = logging.getLogger("rosati")
+_RAIZ = Path(__file__).parent
+
+CLASIFICACIONES = ["HOT", "WARM", "COLD", "DESCARTAR"]
+FUENTES = ["Instagram Ads", "Facebook Ads", "Formulario Web"]
+DIMENSIONES_BANT = ["budget", "authority", "need", "timeline"]
+
+
+@asynccontextmanager
+async def _ciclo_de_vida(app: FastAPI):
+    db.iniciar_db()
+    yield
+
 
 app = FastAPI(
-    title="Calificación de Leads BANT — Rosati Motors",
-    description="Recibe un lead de Instagram/Facebook Ads o formulario web y "
-    "devuelve su calificación BANT (HOT / WARM / COLD / DESCARTAR).",
+    title="Rosati Motors · Lead Intelligence",
+    description="Califica leads con metodología BANT (Claude) y los enruta al "
+    "equipo comercial. Panel web en `/`, contrato JSON de la spec en `/calificar-lead`.",
+    lifespan=_ciclo_de_vida,
 )
+app.mount("/static", StaticFiles(directory=_RAIZ / "static"), name="static")
+plantillas = Jinja2Templates(directory=_RAIZ / "templates")
 
 
 class LeadEntrada(BaseModel):
-    fuente: str
-    fecha: str
-    nombre: str
-    telefono: str | None = None
-    email: str | None = None
-    ciudad_o_ubicacion: str | None = None
-    modelo_interes: str | None = None
-    mensaje_o_comentario: str
-    datos_adicionales_perfil: str | None = None
+    fuente: str = Field(min_length=2, max_length=50)
+    fecha: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$", description="YYYY-MM-DD")
+    nombre: str = Field(min_length=2, max_length=200)
+    telefono: str | None = Field(default=None, max_length=50)
+    email: str | None = Field(default=None, max_length=200)
+    ciudad_o_ubicacion: str | None = Field(default=None, max_length=200)
+    modelo_interes: str | None = Field(default=None, max_length=200)
+    mensaje_o_comentario: str = Field(min_length=3, max_length=5000)
+    datos_adicionales_perfil: str | None = Field(default=None, max_length=5000)
 
+    @field_validator("fecha")
+    @classmethod
+    def _fecha_real(cls, valor: str) -> str:
+        try:
+            date.fromisoformat(valor)
+        except ValueError as error:
+            raise ValueError("la fecha debe ser válida y usar el formato YYYY-MM-DD") from error
+        return valor
 
-def _texto_normalizado(lead: LeadEntrada) -> str:
-    """Une campos relevantes para las reglas transparentes del modo demo."""
-    texto = " ".join(str(valor or "") for valor in (
-        lead.nombre, lead.ciudad_o_ubicacion, lead.modelo_interes,
-        lead.mensaje_o_comentario, lead.datos_adicionales_perfil,
-    )).lower()
-    return "".join(caracter for caracter in unicodedata.normalize("NFD", texto)
-                   if unicodedata.category(caracter) != "Mn")
-
-
-def _incluye(texto: str, *terminos: str) -> bool:
-    return any(termino in texto for termino in terminos)
-
-
-def _resultado_demo(lead: LeadEntrada) -> dict:
-    """Simula una calificación y su destino comercial sin servicios externos."""
-    texto = _texto_normalizado(lead)
-    fan = _incluye(texto, "algun dia", "mi sueno", "mas fotos", "que carro", "brutal")
-    budget = 25 if _incluye(texto, "contado", "cash buyer", "pre-aprobado", "preaprobado") else 22 if _incluye(texto, "gerente", "ceo", "empresario", "inversor", "inmobiliario") else 14 if _incluye(texto, "financiamiento", "financiacion") else (2 if fan else 6)
-    authority = 3 if _incluye(texto, "para un amigo", "para mi jefe", "para alguien") else 25 if _incluye(texto, "gerente", "ceo", "empresario", "inversor") else 16 if _incluye(texto, "quiero", "busco", "me interesa", "evaluando") else 5
-    need = 25 if _incluye(texto, "test drive", "visita", "cita", "showroom") else 18 if _incluye(texto, "comprar", "renovar", "evaluando", "financiamiento", "disponibilidad") else (2 if fan else 7)
-    timeline = 25 if _incluye(texto, "esta semana", "hoy", "manana", "mañana") else 14 if _incluye(texto, "fin de ano", "fin de año", "proximos meses", "próximos meses", "trimestre") else (2 if fan else 6)
-    puntajes = {"budget": budget, "authority": authority, "need": need, "timeline": timeline}
-    total = sum(puntajes.values())
-    clasificacion = "HOT" if total >= 80 else "WARM" if total >= 55 else "COLD" if total >= 30 else "DESCARTAR"
-    ubicacion = _texto_normalizado(lead)
-    showroom = "Quito - Av. de los Shyris" if "quito" in ubicacion else "Samborondón" if "samborondon" in ubicacion else "Por confirmar"
-    nombre_normalizado = "".join(
-        caracter
-        for caracter in unicodedata.normalize("NFD", lead.nombre.lower())
-        if unicodedata.category(caracter) != "Mn"
+    @field_validator(
+        "fuente", "nombre", "telefono", "email", "ciudad_o_ubicacion",
+        "modelo_interes", "mensaje_o_comentario", "datos_adicionales_perfil",
+        mode="before",
     )
-    slug = re.sub(r"[^a-z0-9]+", "-", nombre_normalizado).strip("-") or "lead"
-    calificacion = CalificacionLead(
-        lead_id_sugerido=f"DEMO-{slug.upper()}", puntajes=puntajes,
-        puntaje_total=total, clasificacion=clasificacion, showroom_recomendado=showroom,
-        perfil_estimado="Prospecto con intención de compra" if total >= 55 else "Prospecto en etapa temprana de evaluación",
-        señales_clave=[f"{dimension.title()}: {puntaje}/25" for dimension, puntaje in puntajes.items()],
-        alertas_red_flags=["Interés principalmente aspiracional o informativo"] if total < 30 else [],
-        accion_recomendada="Contactar y agendar una conversación comercial" if total >= 55 else "Incluir en secuencia de nutrición y remarketing",
-    )
-    destinos = {
-        "HOT": ("Valentina Reyes", "Asesora senior", "Contacto inmediato", "Contactar en menos de 2 horas"),
-        "WARM": ("Camila Paredes", "Asesora comercial", "Seguimiento prioritario", "Contactar en menos de 24 horas"),
-        "COLD": ("Automatización de marketing", "Nurturing", "Nutrición automática", "Enviar contenido y revaluar en 14 días"),
-        "DESCARTAR": ("Audiencia de marca", "Remarketing", "Remarketing", "No asignar a ventas"),
-    }
-    asesor, rol, etapa, sla = destinos[calificacion.clasificacion]
-    return {"calificacion": calificacion.model_dump(), "crm": {
-        "plataforma": "CRM conectado", "estado": "Lead creado y sincronizado", "etapa": etapa,
-        "asesor": asesor, "rol_asesor": rol, "sla": sla,
-    }, "modo": "demo"}
+    @classmethod
+    def _limpiar_texto(cls, valor: object) -> object:
+        if valor is None:
+            return None
+        if isinstance(valor, str):
+            limpio = valor.strip()
+            return limpio or None
+        return valor
+
+
+def motor_claude_disponible() -> bool:
+    return bool(os.environ.get("ANTHROPIC_API_KEY"))
+
+
+def _calificar_resiliente(entrada: dict) -> tuple[CalificacionLead, str]:
+    """Claude si hay credenciales; si no (o si la llamada falla), simulador.
+
+    Pensado para la experiencia web del demo: nunca deja al presentador
+    frente a un error. El contrato estricto con Claude vive en /calificar-lead.
+    """
+    if motor_claude_disponible():
+        try:
+            return clasificar_lead(entrada), "claude"
+        except (TypeError, RuntimeError, anthropic.APIConnectionError, anthropic.APIError) as e:
+            log.warning("Claude no disponible (%s); se usa el simulador", e)
+    return calificar_simulado(entrada), "simulador"
+
+
+def _persistir(entrada: dict, calificacion: CalificacionLead, motor: str) -> db.Lead:
+    crm = asignacion_crm(calificacion.clasificacion)
+    return db.guardar_lead(entrada, calificacion.model_dump(), crm, motor)
+
+
+# ─────────────────────────── API JSON ───────────────────────────
 
 
 @app.post("/calificar-lead", response_model=CalificacionLead)
-def calificar_lead(lead: LeadEntrada) -> CalificacionLead:
+def calificar_lead_spec(lead: LeadEntrada) -> CalificacionLead:
+    """Contrato de la spec: califica SIEMPRE con Claude y persiste el resultado."""
     try:
-        return clasificar_lead(lead.model_dump())
+        calificacion = clasificar_lead(lead.model_dump())
     except TypeError:
         # El SDK lanza TypeError cuando no hay ninguna credencial configurada
         raise HTTPException(status_code=500, detail="ANTHROPIC_API_KEY no configurada en el servidor")
@@ -105,19 +133,180 @@ def calificar_lead(lead: LeadEntrada) -> CalificacionLead:
         raise HTTPException(status_code=502, detail=f"Error de la API de Anthropic ({e.status_code})")
     except anthropic.APIConnectionError:
         raise HTTPException(status_code=503, detail="Sin conexión con la API de Anthropic")
-
-
-@app.get("/salud")
-def salud() -> dict:
-    return {"estado": "ok"}
+    except RuntimeError as error:
+        raise HTTPException(status_code=502, detail=str(error))
+    _persistir(lead.model_dump(), calificacion, "claude")
+    return calificacion
 
 
 @app.post("/demo/calificar")
 def calificar_demo(lead: LeadEntrada) -> dict:
-    """Simula el flujo completo para presentaciones, sin llamar a servicios externos."""
-    return _resultado_demo(lead)
+    """Simulador sin servicios externos (compatibilidad con la demo original)."""
+    calificacion = calificar_simulado(lead.model_dump())
+    fila = _persistir(lead.model_dump(), calificacion, "simulador")
+    return {
+        "calificacion": calificacion.model_dump(),
+        "crm": {"plataforma": "CRM conectado", "estado": "Lead creado y sincronizado",
+                **asignacion_crm(calificacion.clasificacion)},
+        "modo": "demo",
+        "lead_db_id": fila.id,
+    }
+
+
+@app.post("/api/leads")
+def crear_lead(lead: LeadEntrada) -> dict:
+    """Califica con el mejor motor disponible, persiste y devuelve todo el flujo."""
+    calificacion, motor = _calificar_resiliente(lead.model_dump())
+    fila = _persistir(lead.model_dump(), calificacion, motor)
+    return {
+        "id": fila.id,
+        "motor": motor,
+        "calificacion": calificacion.model_dump(),
+        "crm": {"plataforma": "CRM conectado", "estado": "Lead creado y sincronizado",
+                **asignacion_crm(calificacion.clasificacion)},
+    }
+
+
+@app.get("/api/leads")
+def listar_leads_json(
+    clasificacion: str | None = None, fuente: str | None = None, q: str | None = None
+) -> list[dict]:
+    return [
+        {
+            "id": lead.id,
+            "fecha": lead.fecha,
+            "nombre": lead.nombre,
+            "fuente": lead.fuente,
+            "modelo_interes": lead.modelo_interes,
+            "puntaje_total": lead.puntaje_total,
+            "clasificacion": lead.clasificacion,
+            "showroom_recomendado": lead.showroom_recomendado,
+            "asesor": lead.asesor,
+            "motor": lead.motor,
+        }
+        for lead in db.listar_leads(clasificacion, fuente, q)
+    ]
+
+
+@app.get("/api/estadisticas")
+def estadisticas_json() -> dict:
+    return db.estadisticas()
+
+
+@app.get("/salud")
+def salud() -> dict:
+    return {
+        "estado": "ok",
+        "leads": db.estadisticas()["total"],
+        "motor_claude": motor_claude_disponible(),
+        "base_datos": db.TIPO_BD,
+    }
+
+
+# ─────────────────────────── Vistas web ───────────────────────────
+
+
+def _serie_diaria(por_dia: dict, dias: int = 14) -> list[dict]:
+    """Serie de conteos por día para el gráfico del panel (últimos N días con datos)."""
+    fechas_validas = []
+    for texto in por_dia:
+        try:
+            fechas_validas.append(date.fromisoformat(texto))
+        except ValueError:
+            continue
+    fin = max(fechas_validas) if fechas_validas else date.today()
+    serie = []
+    maximo = 1
+    for i in range(dias - 1, -1, -1):
+        dia = fin - timedelta(days=i)
+        valor = por_dia.get(dia.isoformat(), 0)
+        maximo = max(maximo, valor)
+        serie.append({"fecha": dia.isoformat(), "etiqueta": f"{dia.day:02d}", "valor": valor})
+    for punto in serie:
+        punto["pct"] = round(100 * punto["valor"] / maximo)
+    return serie
+
+
+def _contexto_base() -> dict:
+    return {"motor_claude": motor_claude_disponible(), "clasificaciones": CLASIFICACIONES}
+
+
+@app.get("/", response_class=HTMLResponse, include_in_schema=False)
+def panel(request: Request):
+    stats = db.estadisticas()
+    total = stats["total"] or 1
+    distribucion = [
+        {
+            "nombre": c,
+            "valor": stats["por_clasificacion"][c],
+            "pct": round(100 * stats["por_clasificacion"][c] / total),
+        }
+        for c in CLASIFICACIONES
+    ]
+    bant = [
+        {"nombre": d, "valor": stats["promedios_bant"][d],
+         "pct": round(100 * stats["promedios_bant"][d] / 25)}
+        for d in DIMENSIONES_BANT
+    ]
+    return plantillas.TemplateResponse(
+        request,
+        "panel.html",
+        {
+            **_contexto_base(),
+            "activo": "panel",
+            "stats": stats,
+            "distribucion": distribucion,
+            "bant": bant,
+            "serie": _serie_diaria(stats["por_dia"]),
+            "recientes": db.listar_leads(limite=6),
+        },
+    )
+
+
+@app.get("/leads", response_class=HTMLResponse, include_in_schema=False)
+def vista_leads(
+    request: Request,
+    clasificacion: str | None = None,
+    fuente: str | None = None,
+    q: str | None = None,
+):
+    leads = db.listar_leads(clasificacion or None, fuente or None, q or None)
+    return plantillas.TemplateResponse(
+        request,
+        "leads.html",
+        {
+            **_contexto_base(),
+            "activo": "leads",
+            "leads": leads,
+            "fuentes": FUENTES,
+            "filtro_clasificacion": clasificacion or "",
+            "filtro_fuente": fuente or "",
+            "filtro_q": q or "",
+        },
+    )
+
+
+@app.get("/leads/{lead_id}", response_class=HTMLResponse, include_in_schema=False)
+def vista_lead(request: Request, lead_id: int):
+    lead = db.obtener_lead(lead_id)
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead no encontrado")
+    return plantillas.TemplateResponse(
+        request,
+        "lead_detalle.html",
+        {**_contexto_base(), "activo": "leads", "lead": lead},
+    )
+
+
+@app.get("/nuevo", response_class=HTMLResponse, include_in_schema=False)
+def vista_nuevo(request: Request):
+    return plantillas.TemplateResponse(
+        request,
+        "nuevo.html",
+        {**_contexto_base(), "activo": "nuevo", "hoy": date.today().isoformat()},
+    )
 
 
 @app.get("/demo", include_in_schema=False)
-def demo() -> FileResponse:
-    return FileResponse(Path(__file__).parent / "demo.html")
+def demo_redireccion() -> RedirectResponse:
+    return RedirectResponse("/nuevo", status_code=307)

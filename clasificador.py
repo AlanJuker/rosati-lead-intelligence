@@ -64,4 +64,8 @@ def clasificar_lead(lead: dict, client: anthropic.Anthropic | None = None) -> Ca
         messages=[{"role": "user", "content": json.dumps(lead, ensure_ascii=False)}],
         output_format=CalificacionLead,
     )
+    if respuesta.parsed_output is None:
+        raise RuntimeError(
+            f"El modelo no devolvió una calificación válida (stop_reason={respuesta.stop_reason})"
+        )
     return respuesta.parsed_output

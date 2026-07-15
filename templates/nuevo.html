@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% block titulo %}Calificar lead · Rosati Motors · Lead Intelligence{% endblock %}
+{% block contenido %}
+
+<div class="encabezado">
+  <div>
+    <span class="sobrelinea">Calificación en vivo</span>
+    <h1>Del formulario al asesor<br>indicado, en segundos.</h1>
+    <p>Simula un lead entrante y recorre el flujo completo: captura, calificación BANT
+       {{ 'con Claude (IA)' if motor_claude else 'con el simulador de reglas' }}, registro en CRM y asignación comercial.</p>
+  </div>
+</div>
+
+<div class="pasos" aria-label="Flujo del lead">
+  <div class="paso" id="paso-1"><span class="num">01</span> Captura</div>
+  <span class="paso-flecha">→</span>
+  <div class="paso" id="paso-2"><span class="num">02</span> Calificación BANT</div>
+  <span class="paso-flecha">→</span>
+  <div class="paso" id="paso-3"><span class="num">03</span> Registro en CRM</div>
+  <span class="paso-flecha">→</span>
+  <div class="paso" id="paso-4"><span class="num">04</span> Asignación</div>
+</div>
+
+<div class="captura">
+  <form class="tarjeta formulario" id="formulario-lead">
+    <h2>Lead entrante</h2>
+    <p class="subtitulo">Completa los datos o carga un escenario de ejemplo</p>
+    <div class="escenarios">
+      <button type="button" data-escenario="hot">Lead HOT</button>
+      <button type="button" data-escenario="warm">Lead WARM</button>
+      <button type="button" data-escenario="curioso">Curioso</button>
+    </div>
+
+    <div class="fila-doble">
+      <div>
+        <label for="campo-nombre">Nombre</label>
+        <input id="campo-nombre" name="nombre" required value="Andrés Villamar">
+      </div>
+      <div>
+        <label for="campo-fuente">Fuente</label>
+        <select id="campo-fuente" name="fuente">
+          <option>Instagram Ads</option>
+          <option>Facebook Ads</option>
+          <option>Formulario Web</option>
+        </select>
+      </div>
+    </div>
+    <div class="fila-doble">
+      <div>
+        <label for="campo-ciudad">Ciudad</label>
+        <input id="campo-ciudad" name="ciudad_o_ubicacion" value="Samborondón">
+      </div>
+      <div>
+        <label for="campo-modelo">Modelo de interés</label>
+        <input id="campo-modelo" name="modelo_interes" value="Lamborghini Urus">
+      </div>
+    </div>
+    <label for="campo-mensaje">Mensaje o comentario</label>
+    <textarea id="campo-mensaje" name="mensaje_o_comentario" required>Buenas tardes, soy gerente general de un grupo inmobiliario. Busco renovar antes de fin de año. ¿Podrían coordinar un test drive esta semana? Pago de contado.</textarea>
+    <label for="campo-perfil">Información adicional del perfil</label>
+    <input id="campo-perfil" name="datos_adicionales_perfil" value="CEO de grupo inmobiliario">
+    <div class="fila-doble">
+      <div>
+        <label for="campo-telefono">Teléfono</label>
+        <input id="campo-telefono" name="telefono" value="+593 99 123 4567">
+      </div>
+      <div>
+        <label for="campo-email">Email</label>
+        <input id="campo-email" name="email" type="email" value="demo@rosatimotors.ec">
+      </div>
+    </div>
+    <input type="hidden" name="fecha" value="{{ hoy }}">
+    <button class="boton-oro" type="submit" id="boton-enviar" style="width: 100%; justify-content: center; margin-top: 20px;">
+      Calificar y enviar al CRM →
+    </button>
+    <p class="aviso-error" id="aviso-error" role="alert" aria-live="polite" hidden></p>
+  </form>
+
+  <div>
+    <div class="resultado-vacio" id="resultado-vacio">
+      <div>
+        <strong>Esperando un lead</strong>
+        Completa el formulario o carga un escenario<br>para recorrer el flujo comercial completo.
+      </div>
+    </div>
+
+    <div class="resultado" id="resultado">
+      <div class="tarjeta aparece">
+        <div class="resultado-cabecera">
+          <div>
+            <span class="sobrelinea" style="color: var(--tinta-3);">Calificación BANT</span>
+            <h3 id="res-perfil">—</h3>
+          </div>
+          <span class="pastilla" id="res-clasificacion">—</span>
+        </div>
+        <div class="puntaje-grande"><span id="res-total">0</span><small> /100 puntos</small></div>
+        <div class="grafico-filas" id="res-bant"></div>
+        <p class="subtitulo" style="margin: 20px 0 0;" id="res-accion"></p>
+        <p class="subtitulo" style="margin: 8px 0 0;">
+          Motor: <span class="insignia-motor" id="res-motor">—</span>
+        </p>
+      </div>
+
+      <div class="tarjeta tarjeta-crm aparece">
+        <div class="crm-encima"><span>CRM · Asignación</span><span>● Sincronizado</span></div>
+        <h3 id="res-asesor">—</h3>
+        <p class="rol" id="res-rol">—</p>
+        <div class="crm-detalles">
+          <div><span>Etapa</span><b id="res-etapa">—</b></div>
+          <div><span>Acción / SLA</span><b id="res-sla">—</b></div>
+          <div><span>Showroom</span><b id="res-showroom">—</b></div>
+          <div><span>Registro</span><b id="res-registro">—</b></div>
+        </div>
+      </div>
+
+      <a class="boton-fantasma aparece" id="res-enlace" href="#">Ver expediente completo →</a>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}<script src="/static/app.js"></script>{% endblock %}

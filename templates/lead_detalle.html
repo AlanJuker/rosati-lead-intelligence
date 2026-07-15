@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block titulo %}{{ lead.nombre }} · Rosati Motors · Lead Intelligence{% endblock %}
+{% block contenido %}
+
+<nav class="miga" aria-label="Ruta"><a href="/leads">Pipeline</a> / {{ lead.lead_id_sugerido }}</nav>
+
+<div class="encabezado">
+  <div>
+    <span class="sobrelinea">Expediente de lead</span>
+    <h1>{{ lead.nombre }}</h1>
+    <p>{{ lead.perfil_estimado }}</p>
+  </div>
+  <span class="pastilla {{ lead.clasificacion }}" style="font-size: 13px; padding: 9px 18px;">{{ lead.clasificacion }}</span>
+</div>
+
+<div class="expediente">
+  <div class="columna">
+
+    <div class="tarjeta">
+      <h2>Calificación BANT</h2>
+      <p class="subtitulo">
+        Motor:
+        <span class="insignia-motor {{ 'claude' if lead.motor == 'claude' }}">
+          {{ {'claude': '✦ Claude (IA)', 'simulador': 'Simulador de reglas', 'semilla': 'Dato histórico de demostración'}[lead.motor] }}
+        </span>
+      </p>
+      <div class="puntaje-grande">{{ lead.puntaje_total }}<small> /100 puntos</small></div>
+      <div class="grafico-filas">
+        {% for dimension, puntaje in lead.puntajes.items() %}
+        <div class="fila-dato" title="{{ dimension | title }}: {{ puntaje }} de 25">
+          <span class="nombre">{{ dimension | upper }}</span>
+          <div class="pista"><div class="relleno relleno-oro" style="width: {{ [puntaje * 4, 2] | max }}%"></div></div>
+          <span class="cifra"><b>{{ puntaje }}</b> / 25</span>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="tarjeta">
+      <h2>Mensaje del lead</h2>
+      <p class="subtitulo">{{ lead.fuente }} · {{ lead.fecha }}</p>
+      <blockquote class="cita">“{{ lead.mensaje_o_comentario }}”</blockquote>
+      {% if lead.datos_adicionales_perfil %}
+      <p class="subtitulo" style="margin: 18px 0 6px;">Datos adicionales del perfil</p>
+      <p style="margin: 0; color: var(--tinta-2); font-size: 13.5px;">{{ lead.datos_adicionales_perfil }}</p>
+      {% endif %}
+    </div>
+
+    <div class="tarjeta">
+      <h2>Análisis</h2>
+      <p class="subtitulo">Señales que justifican el puntaje</p>
+      <div class="listas-señales">
+        <div>
+          <p class="subtitulo" style="margin-bottom: 10px;">Señales clave</p>
+          <ul class="lista-marcas">
+            {% for señal in lead.senales_clave %}<li>{{ señal }}</li>{% else %}<li class="nada">Sin señales registradas</li>{% endfor %}
+          </ul>
+        </div>
+        <div>
+          <p class="subtitulo" style="margin-bottom: 10px;">Alertas / red flags</p>
+          <ul class="lista-marcas alertas">
+            {% for alerta in lead.alertas_red_flags %}<li>{{ alerta }}</li>{% else %}<li class="nada">Sin alertas detectadas</li>{% endfor %}
+          </ul>
+        </div>
+      </div>
+    </div>
+
+  </div>
+  <div class="columna">
+
+    <div class="tarjeta tarjeta-crm">
+      <div class="crm-encima"><span>CRM · Asignación</span><span>● Sincronizado</span></div>
+      <h3>{{ lead.asesor }}</h3>
+      <p class="rol">{{ lead.rol_asesor }}</p>
+      <div class="crm-detalles">
+        <div><span>Etapa</span><b>{{ lead.etapa }}</b></div>
+        <div><span>Acción / SLA</span><b>{{ lead.sla }}</b></div>
+        <div><span>Showroom</span><b>{{ lead.showroom_recomendado }}</b></div>
+        <div><span>Registro</span><b>{{ lead.lead_id_sugerido }}</b></div>
+      </div>
+    </div>
+
+    <div class="tarjeta">
+      <h2>Acción recomendada</h2>
+      <p style="margin: 8px 0 0; color: var(--tinta-2);">{{ lead.accion_recomendada }}</p>
+    </div>
+
+    <div class="tarjeta">
+      <h2>Contacto</h2>
+      <div class="datos-clave" style="margin-top: 14px;">
+        <div><span>Teléfono</span><b>{{ lead.telefono or '—' }}</b></div>
+        <div><span>Email</span><b style="word-break: break-all;">{{ lead.email or '—' }}</b></div>
+        <div><span>Ubicación</span><b>{{ lead.ciudad_o_ubicacion or 'Por confirmar' }}</b></div>
+        <div><span>Modelo de interés</span><b>{{ lead.modelo_interes or '—' }}</b></div>
+      </div>
+    </div>
+
+    <a class="boton-fantasma" href="/leads">← Volver al pipeline</a>
+  </div>
+</div>
+
+{% endblock %}

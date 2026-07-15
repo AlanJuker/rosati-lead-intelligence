@@ -1,4 +1,4 @@
-# Contexto del proyecto — Sistema de Calificación de Leads BANT (Rosati Motors)
+# Contexto del proyecto — Rosati Motors · Lead Intelligence (BANT)
 
 Guía para agentes de código (Codex, Claude Code, etc.) que trabajen en este repo.
 Última actualización: 2026-07-15.
@@ -7,95 +7,86 @@ Guía para agentes de código (Codex, Claude Code, etc.) que trabajen en este re
 
 Implementación del sistema descrito en `prompt-calificacion-leads-BANT-RosatiMotors (2).md`
 (el documento de especificación original — **no editarlo**, es la fuente de requisitos).
-Rosati Motors es un concesionario de ultra-lujo en Ecuador (Lamborghini, Maserati, McLaren);
-el sistema recibe leads de Instagram/Facebook Ads o formulario web, los envía a Claude con
-un prompt BANT y devuelve una calificación JSON (HOT / WARM / COLD / DESCARTAR) que dispara
-la asignación automática al equipo de ventas vía n8n.
+Rosati Motors es un concesionario de ultra-lujo en Ecuador (Lamborghini, Maserati, McLaren).
+La app recibe leads de Instagram/Facebook Ads o formulario web, los califica con metodología
+BANT (Claude), los persiste en PostgreSQL (SQLite local) y los enruta al equipo comercial. Incluye una interfaz
+web completa (panel, pipeline, expediente, calificación en vivo) con tema oscuro de lujo
+automotriz, pensada para demos con clientes y desplegada en Railway.
 
 ## Arquitectura y archivos
 
 | Archivo | Rol |
 |---|---|
-| `prompt_sistema.md` | Prompt de sistema BANT que se envía a Claude. Extraído casi verbatim de la spec. Editable por negocio sin tocar código. |
-| `clasificador.py` | Núcleo. `clasificar_lead(dict) -> CalificacionLead`. Usa el SDK oficial `anthropic` con `client.messages.parse()` + `output_format=<modelo Pydantic>` (structured outputs: la API garantiza que la respuesta cumple el esquema). Modelo: `claude-opus-4-8`, thinking adaptativo. |
-| `api.py` | Webhook FastAPI. `POST /calificar-lead` (producción con Claude), `POST /demo/calificar` (simulación sin IA externa), `GET /salud` y `GET /demo`. |
-| `demo.html` | Interfaz de presentación para cliente: formulario → BANT → CRM simulado → asesor/SLA asignado. La sirve `GET /demo`. |
-| `probar_ejemplos.py` | Corre los 3 leads de `ejemplos/` contra el clasificador e imprime resultados. Requiere `ANTHROPIC_API_KEY`. |
-| `ejemplos/*.json` | Los 3 leads simulados de la spec: `lead_hot.json`, `lead_warm.json`, `lead_descartar.json`. Sus nombres indican la clasificación esperada. |
-| `n8n/workflow-calificacion-leads.json` | Workflow n8n importable: Webhook → HTTP Request a la API → Respond to Webhook + Switch por `clasificacion` con 4 salidas (los nodos finales son placeholders NoOp a reemplazar por acciones reales). |
+| `prompt_sistema.md` | Prompt de sistema BANT para Claude. Editable por negocio sin tocar código. |
+| `clasificador.py` | `clasificar_lead(dict) -> CalificacionLead`. SDK `anthropic`, `client.messages.parse()` + `output_format=<Pydantic>` (structured outputs). Modelo `claude-opus-4-8`, thinking adaptativo. Lanza `RuntimeError` si `parsed_output` es None (refusal). |
+| `simulador.py` | `calificar_simulado(dict)` — heurística transparente para demo sin API key, y `asignacion_crm(clasificacion)` — mapeo único clasificación → asesor/etapa/SLA. |
+| `db.py` | PostgreSQL/SQLite + SQLAlchemy 2.0. Modelo `Lead` (entrada + calificación aplanada + asignación + `motor`). Usa `DATABASE_URL` en Railway; sin ella cae a `data/leads.db`. `iniciar_db()` crea tablas y siembra `datos_semilla.json` si está vacía. |
+| `datos_semilla.json` | 18 leads históricos simulados (4 HOT, 5 WARM, 5 COLD, 4 DESCARTAR), sumas consistentes con los umbrales, `motor: "semilla"`. |
+| `api.py` | App FastAPI: vistas web (Jinja2: `/`, `/leads`, `/leads/{id}`, `/nuevo`) + API JSON (`/calificar-lead`, `/demo/calificar`, `/api/leads`, `/api/estadisticas`, `/salud`). `/demo` redirige a `/nuevo`. |
+| `templates/`, `static/` | UI. `estilos.css` es el sistema de diseño (tokens en `:root`); `app.js` maneja la página de captura. |
+| `railway.json` / `Procfile` / `.python-version` | Despliegue en Railway: `uvicorn api:app --host 0.0.0.0 --port $PORT`, healthcheck `/salud`. |
+| `probar_ejemplos.py` + `ejemplos/*.json` | Prueba end-to-end del clasificador con Claude (3 leads de la spec). |
+| `tests/test_app.py` | Pruebas de humo sin Claude: siembra, vistas, persistencia, filtros y validación. |
+| `n8n/workflow-calificacion-leads.json` | Workflow n8n importable (webhook → API → switch por clasificación). |
 
 ## Decisiones de diseño (respetarlas al modificar)
 
-1. **El total y la clasificación se recalculan en código**, no se confía en la aritmética
-   del modelo: el `model_validator` de `CalificacionLead` en `clasificador.py` suma los 4
-   puntajes y aplica los umbrales (>=80 HOT, >=55 WARM, >=30 COLD, resto DESCARTAR).
-   Si se cambian los umbrales, ese validador es el único lugar.
+1. **El total y la clasificación se recalculan en código** (validador de `CalificacionLead`
+   en `clasificador.py`; umbrales ≥80 HOT, ≥55 WARM, ≥30 COLD). Único lugar para cambiarlos.
 2. **Structured outputs, no parseo manual**: nunca reemplazar `messages.parse()` por
-   `messages.create()` + `json.loads()` del texto.
-3. **El prompt vive en `prompt_sistema.md`**, no como string en Python, para que
-   marketing/ventas pueda ajustarlo.
-4. **Campos del esquema en español, tal como los define la spec** (incluye `señales_clave`
-   con ñ — identificador Python válido; no "arreglarlo" a ASCII).
-5. El SDK lanza `TypeError` (no `AuthenticationError`) cuando no hay ninguna credencial
-   configurada; `api.py` maneja ambos casos por separado. No eliminar el `except TypeError`.
+   `create()` + `json.loads()`.
+3. **Dos motores con contratos distintos**: `POST /calificar-lead` (spec, n8n) exige Claude y
+   falla con error claro si no hay key; `POST /api/leads` (la web) es resiliente — usa Claude
+   si hay key y cae al simulador si no o si la llamada falla, marcando `motor` en la fila.
+   No mezclar estos comportamientos.
+4. **Todo lead calificado se persiste** con su `motor` (`claude` | `simulador` | `semilla`);
+   la UI siempre muestra el motor (transparencia frente al cliente).
+5. **Campos del esquema en español, tal como la spec** (incluye `señales_clave` con ñ en el
+   JSON de salida; la columna en DB es `senales_clave` por compatibilidad SQL).
+6. El SDK lanza `TypeError` (no `AuthenticationError`) cuando no hay ninguna credencial;
+   `api.py` maneja ambos por separado. No eliminar el `except TypeError`.
+7. **Colores de clasificación = estados semánticos** (HOT rojo, WARM ámbar, COLD azul,
+   DESCARTAR gris), siempre acompañados de etiqueta de texto — nunca color solo. Los
+   gráficos de magnitud usan un solo matiz (dorado). Tokens en `static/estilos.css`.
+8. La base **no se versiona**; lo que se versiona es `datos_semilla.json`. Producción usa
+   PostgreSQL vía `DATABASE_URL`; SQLite es solo el fallback local. No hay migraciones porque es un demo.
 
 ## Estado: qué está HECHO y verificado ✅
 
-- Código completo de clasificador, API, ejemplos, script de prueba y workflow n8n.
-- Dependencias instaladas (Python 3.13, `anthropic` 0.116.0, FastAPI). Imports OK.
-- Validador probado con datos deliberadamente incorrectos: recalcula total/clasificación bien.
-- Servidor levantado y probado en vivo: `GET /salud` → 200; `GET /docs` → 200;
-  body inválido → 422 con detalle de campos; lead válido sin API key → 500 con mensaje claro.
-- Workflow n8n validado como JSON bien formado (8 nodos).
-- Demo para cliente implementada y probada: `GET /demo` y `POST /demo/calificar`.
-  No requiere `ANTHROPIC_API_KEY`; los escenarios HOT/WARM/DESCARTAR muestran puntajes,
-  sincronización de CRM simulada, asesor y SLA. Sus reglas son solo de presentación:
-  no reemplazan `clasificar_lead()` ni la evaluación real con Claude.
+- Clasificador con Claude (structured outputs) + simulador de reglas + validador probado.
+- PostgreSQL en Railway, SQLite local, siembra automática, CRUD y agregados.
+- App web completa: panel con métricas y gráficos, pipeline con filtros, expediente,
+  calificación en vivo con animaciones. Tema oscuro oro/carbono, responsive.
+- Configuración de Railway (railway.json + Procfile + healthcheck) y PostgreSQL documentado.
+- Pruebas automatizadas de humo con `unittest` (4 casos, sin consumo de Claude).
+- Workflow n8n validado como JSON.
 
 ## Estado: qué NO está hecho / pendiente ⏳
 
-1. **Nunca se ha ejecutado una llamada real a Claude** — no hay `ANTHROPIC_API_KEY` en la
-   máquina de desarrollo. Por tanto la calidad de la calificación (que los 3 ejemplos
-   salgan HOT/WARM/DESCARTAR como se espera) NO está verificada. Primer paso para
-   cualquier agente con credenciales: `python probar_ejemplos.py`.
-2. **Nodos finales del workflow n8n son placeholders** — falta conectar CRM/notificaciones
-   reales, y decidir si la entrada será el webhook genérico o el trigger de Meta Lead Ads.
-3. **Calibración** — la spec recomienda correr 20–30 leads históricos reales y comparar
-   contra el criterio manual del equipo de ventas antes de producción. No iniciado.
-4. **Sin tests automatizados** (pytest) ni CI. El único harness es `probar_ejemplos.py`,
-   que requiere API key y gasta tokens.
-5. **Sin despliegue** — la API solo ha corrido en localhost. n8n Cloud no alcanza
-   localhost; para producción hará falta desplegar la API o un túnel.
+1. **Nunca se ha ejecutado una llamada real a Claude** — sin `ANTHROPIC_API_KEY` en la máquina
+   de desarrollo. La calidad de calificación del prompt NO está verificada. Primer paso con
+   credenciales: `python probar_ejemplos.py`.
+2. **Deploy real en Railway no ejecutado** — la config está lista pero nadie ha hecho el deploy.
+   Pasos en README → "Desplegar en Railway" (incluye servicio PostgreSQL).
+3. **Nodos finales del workflow n8n son placeholders** (falta CRM/notificaciones reales).
+4. **Calibración** con 20–30 leads históricos reales: no iniciada.
+5. **Sin CI** — las pruebas existen, pero todavía no se ejecutan automáticamente en GitHub.
+6. **Sin autenticación** en el panel — cualquiera con la URL ve el demo. Aceptable para demo;
+   inaceptable para producción con datos reales.
 
 ## Cómo correr
 
 ```powershell
 pip install -r requirements.txt
-$env:ANTHROPIC_API_KEY = "sk-ant-..."   # requerida para clasificar
-python probar_ejemplos.py                # prueba end-to-end con los 3 ejemplos
-python -m uvicorn api:app --reload       # API en http://127.0.0.1:8000/docs
+$env:ANTHROPIC_API_KEY = "sk-ant-..."   # opcional (sin ella: simulador)
+python -m uvicorn api:app --reload       # http://127.0.0.1:8000
 ```
 
-En la máquina donde se desarrolló el demo, el ejecutable disponible fue
-`C:\Users\paola\AppData\Local\Python\bin\python.exe` (Python 3.14). Si `python`
-o `py` abren la Microsoft Store en otra computadora, instala Python desde python.org,
+Si `python` abre la Microsoft Store en otra computadora, instala Python desde python.org,
 activa **Add Python to PATH** y usa `py -m pip` / `py -m uvicorn`.
-
-Para presentar sin credenciales de Anthropic:
-
-```powershell
-python -m uvicorn api:app --host 127.0.0.1 --port 8000
-# Abrir http://127.0.0.1:8000/demo
-```
-
-Prueba rápida del webhook:
-
-```powershell
-curl.exe -X POST http://127.0.0.1:8000/calificar-lead -H "Content-Type: application/json" --data-binary "@ejemplos/lead_hot.json"
-```
 
 ## Convenciones
 
-- Idioma del código, comentarios, docs y mensajes de error: **español**.
+- Idioma del código, comentarios, docs, UI y mensajes de error: **español**.
 - Windows / PowerShell es el entorno de desarrollo del usuario.
 - Mantener el formato de entrada/salida exactamente como lo define la spec original.
