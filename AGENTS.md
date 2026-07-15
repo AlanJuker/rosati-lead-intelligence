@@ -18,7 +18,8 @@ la asignación automática al equipo de ventas vía n8n.
 |---|---|
 | `prompt_sistema.md` | Prompt de sistema BANT que se envía a Claude. Extraído casi verbatim de la spec. Editable por negocio sin tocar código. |
 | `clasificador.py` | Núcleo. `clasificar_lead(dict) -> CalificacionLead`. Usa el SDK oficial `anthropic` con `client.messages.parse()` + `output_format=<modelo Pydantic>` (structured outputs: la API garantiza que la respuesta cumple el esquema). Modelo: `claude-opus-4-8`, thinking adaptativo. |
-| `api.py` | Webhook FastAPI. `POST /calificar-lead` (entrada validada con Pydantic), `GET /salud`. Pensado para ser llamado desde n8n/Zapier/Make/CRM. |
+| `api.py` | Webhook FastAPI. `POST /calificar-lead` (producción con Claude), `POST /demo/calificar` (simulación sin IA externa), `GET /salud` y `GET /demo`. |
+| `demo.html` | Interfaz de presentación para cliente: formulario → BANT → CRM simulado → asesor/SLA asignado. La sirve `GET /demo`. |
 | `probar_ejemplos.py` | Corre los 3 leads de `ejemplos/` contra el clasificador e imprime resultados. Requiere `ANTHROPIC_API_KEY`. |
 | `ejemplos/*.json` | Los 3 leads simulados de la spec: `lead_hot.json`, `lead_warm.json`, `lead_descartar.json`. Sus nombres indican la clasificación esperada. |
 | `n8n/workflow-calificacion-leads.json` | Workflow n8n importable: Webhook → HTTP Request a la API → Respond to Webhook + Switch por `clasificacion` con 4 salidas (los nodos finales son placeholders NoOp a reemplazar por acciones reales). |
@@ -46,6 +47,10 @@ la asignación automática al equipo de ventas vía n8n.
 - Servidor levantado y probado en vivo: `GET /salud` → 200; `GET /docs` → 200;
   body inválido → 422 con detalle de campos; lead válido sin API key → 500 con mensaje claro.
 - Workflow n8n validado como JSON bien formado (8 nodos).
+- Demo para cliente implementada y probada: `GET /demo` y `POST /demo/calificar`.
+  No requiere `ANTHROPIC_API_KEY`; los escenarios HOT/WARM/DESCARTAR muestran puntajes,
+  sincronización de CRM simulada, asesor y SLA. Sus reglas son solo de presentación:
+  no reemplazan `clasificar_lead()` ni la evaluación real con Claude.
 
 ## Estado: qué NO está hecho / pendiente ⏳
 
@@ -53,15 +58,13 @@ la asignación automática al equipo de ventas vía n8n.
    máquina de desarrollo. Por tanto la calidad de la calificación (que los 3 ejemplos
    salgan HOT/WARM/DESCARTAR como se espera) NO está verificada. Primer paso para
    cualquier agente con credenciales: `python probar_ejemplos.py`.
-2. **Repo de GitHub no creado** — `gh` CLI instalado pero sin autenticar. Comando pendiente:
-   `gh repo create Pao-Demo --private --source . --push`.
-3. **Nodos finales del workflow n8n son placeholders** — falta conectar CRM/notificaciones
+2. **Nodos finales del workflow n8n son placeholders** — falta conectar CRM/notificaciones
    reales, y decidir si la entrada será el webhook genérico o el trigger de Meta Lead Ads.
-4. **Calibración** — la spec recomienda correr 20–30 leads históricos reales y comparar
+3. **Calibración** — la spec recomienda correr 20–30 leads históricos reales y comparar
    contra el criterio manual del equipo de ventas antes de producción. No iniciado.
-5. **Sin tests automatizados** (pytest) ni CI. El único harness es `probar_ejemplos.py`,
+4. **Sin tests automatizados** (pytest) ni CI. El único harness es `probar_ejemplos.py`,
    que requiere API key y gasta tokens.
-6. **Sin despliegue** — la API solo ha corrido en localhost. n8n Cloud no alcanza
+5. **Sin despliegue** — la API solo ha corrido en localhost. n8n Cloud no alcanza
    localhost; para producción hará falta desplegar la API o un túnel.
 
 ## Cómo correr
@@ -71,6 +74,18 @@ pip install -r requirements.txt
 $env:ANTHROPIC_API_KEY = "sk-ant-..."   # requerida para clasificar
 python probar_ejemplos.py                # prueba end-to-end con los 3 ejemplos
 python -m uvicorn api:app --reload       # API en http://127.0.0.1:8000/docs
+```
+
+En la máquina donde se desarrolló el demo, el ejecutable disponible fue
+`C:\Users\paola\AppData\Local\Python\bin\python.exe` (Python 3.14). Si `python`
+o `py` abren la Microsoft Store en otra computadora, instala Python desde python.org,
+activa **Add Python to PATH** y usa `py -m pip` / `py -m uvicorn`.
+
+Para presentar sin credenciales de Anthropic:
+
+```powershell
+python -m uvicorn api:app --host 127.0.0.1 --port 8000
+# Abrir http://127.0.0.1:8000/demo
 ```
 
 Prueba rápida del webhook:

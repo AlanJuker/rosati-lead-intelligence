@@ -31,6 +31,14 @@ uvicorn api:app --reload
 
 Con la API corriendo, la documentación interactiva queda en `http://127.0.0.1:8000/docs`.
 
+## Demo para clientes
+
+Con la API en ejecución, abre `http://127.0.0.1:8000/demo`. La pantalla permite
+simular leads HOT, WARM y curiosos, visualizar los cuatro puntajes BANT, el registro
+creado en CRM y el asesor o automatización asignada. Este flujo usa `POST /demo/calificar`,
+con reglas transparentes para la presentación y **no requiere** una API key ni reemplaza
+el endpoint real `POST /calificar-lead`, que sigue usando Claude.
+
 ## Ejemplo de llamada al webhook
 
 ```powershell
