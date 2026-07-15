@@ -22,7 +22,16 @@ class DemoTestCase(unittest.TestCase):
             f"sqlite:///{ruta}", connect_args={"check_same_thread": False}
         )
         self.parche_motor = patch.object(db, "engine", self.motor)
-        self.parche_entorno = patch.dict(os.environ, {"ANTHROPIC_API_KEY": ""})
+        self.parche_entorno = patch.dict(
+            os.environ,
+            {
+                "ANTHROPIC_API_KEY": "",
+                "CLICKUP_API_TOKEN": "",
+                "CLICKUP_LIST_ID": "",
+                "CLICKUP_ASSIGNEE_ID": "",
+                "CLICKUP_ASSIGNEES": "",
+            },
+        )
         self.parche_motor.start()
         self.parche_entorno.start()
         self.contexto_cliente = TestClient(api.app)
@@ -42,9 +51,10 @@ class DemoTestCase(unittest.TestCase):
             salud.json(),
             {
                 "estado": "ok",
-                "leads": 18,
+                "leads": 10,
                 "motor_claude": False,
                 "base_datos": "sqlite",
+                "clickup_configurado": False,
             },
         )
         self.assertEqual(self.cliente.get("/").status_code, 200)
@@ -67,9 +77,11 @@ class DemoTestCase(unittest.TestCase):
         )
         self.assertEqual(respuesta.status_code, 200)
         creado = respuesta.json()
-        self.assertEqual(creado["id"], 19)
+        self.assertEqual(creado["id"], 11)
         self.assertEqual(creado["motor"], "simulador")
         self.assertEqual(creado["calificacion"]["clasificacion"], "HOT")
+        self.assertEqual(creado["clickup"]["estado"], "no_configurado")
+        self.assertEqual(db.numero_asignacion_comercial(creado["id"]), 1)
 
         filtrados = self.cliente.get(
             "/api/leads", params={"clasificacion": "HOT", "q": "Integración"}
@@ -78,6 +90,8 @@ class DemoTestCase(unittest.TestCase):
         self.assertEqual(
             [lead["nombre"] for lead in filtrados.json()], ["Lead Integración"]
         )
+        db.iniciar_db()
+        self.assertEqual(db.estadisticas()["total"], 11)
 
     def test_rechaza_fecha_imposible(self) -> None:
         respuesta = self.cliente.post(

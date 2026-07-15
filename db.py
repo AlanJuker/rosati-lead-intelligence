@@ -1,8 +1,8 @@
 """Capa de datos del sistema de leads — PostgreSQL/SQLite + SQLAlchemy.
 
 En Railway usa PostgreSQL mediante DATABASE_URL. En desarrollo, si esa variable
-no existe, cae automáticamente a SQLite en ./data/leads.db. Si la tabla está
-vacía al arrancar, carga datos_semilla.json para que el demo luzca poblado.
+no existe, cae automáticamente a SQLite en ./data/leads.db. La versión de datos
+demo permite reemplazar una campaña una sola vez sin borrar leads en cada reinicio.
 """
 
 import json
@@ -10,11 +10,15 @@ import os
 from datetime import datetime, timezone
 from pathlib import Path
 
-from sqlalchemy import JSON, DateTime, Integer, String, Text, create_engine, event, func, select
+from sqlalchemy import (
+    JSON, DateTime, Integer, String, Text, create_engine, delete, event, func, inspect,
+    select, text,
+)
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
 
 _RAIZ = Path(__file__).parent
 RUTA_SQLITE = _RAIZ / "data" / "leads.db"
+VERSION_SEMILLA = "campana-meta-instagram-2026-07-v1"
 
 
 def normalizar_url_database(url: str) -> str:
@@ -98,6 +102,13 @@ class Lead(Base):
     etapa: Mapped[str] = mapped_column(String(100))
     sla: Mapped[str] = mapped_column(String(120))
     motor: Mapped[str] = mapped_column(String(20))  # "claude" | "simulador" | "semilla"
+    clickup_task_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    clickup_task_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    clickup_estado: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    clickup_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    clickup_sincronizado_en: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     @property
     def puntajes(self) -> dict:
@@ -109,19 +120,59 @@ class Lead(Base):
         }
 
 
+class EstadoAplicacion(Base):
+    __tablename__ = "estado_aplicacion"
+
+    clave: Mapped[str] = mapped_column(String(100), primary_key=True)
+    valor: Mapped[str] = mapped_column(String(200))
+
+
 def iniciar_db() -> None:
-    """Crea las tablas y siembra datos de demostración si la base está vacía."""
+    """Crea tablas y aplica una campaña demo nueva exactamente una vez."""
     Base.metadata.create_all(engine)
+    _asegurar_columnas_clickup()
     with Session(engine) as sesion:
-        if sesion.scalar(select(func.count(Lead.id))):
-            return
-        ruta_semilla = _RAIZ / "datos_semilla.json"
-        if not ruta_semilla.exists():
-            return
-        for registro in json.loads(ruta_semilla.read_text(encoding="utf-8")):
-            registro["creado_en"] = datetime.fromisoformat(registro["creado_en"])
-            sesion.add(Lead(**registro))
+        estado = sesion.get(EstadoAplicacion, "version_semilla")
+        total = sesion.scalar(select(func.count(Lead.id))) or 0
+        cambio_campana = estado is None or estado.valor != VERSION_SEMILLA
+
+        if cambio_campana:
+            sesion.execute(delete(Lead))
+            _cargar_semillas(sesion)
+            if estado is None:
+                sesion.add(EstadoAplicacion(clave="version_semilla", valor=VERSION_SEMILLA))
+            else:
+                estado.valor = VERSION_SEMILLA
+        elif not total:
+            _cargar_semillas(sesion)
         sesion.commit()
+
+
+def _cargar_semillas(sesion: Session) -> None:
+    ruta_semilla = _RAIZ / "datos_semilla.json"
+    if not ruta_semilla.exists():
+        return
+    for registro in json.loads(ruta_semilla.read_text(encoding="utf-8")):
+        registro["creado_en"] = datetime.fromisoformat(registro["creado_en"])
+        sesion.add(Lead(**registro))
+
+
+def _asegurar_columnas_clickup() -> None:
+    """Actualización mínima para bases creadas antes de integrar ClickUp."""
+    existentes = {columna["name"] for columna in inspect(engine).get_columns("leads")}
+    columnas = {
+        "clickup_task_id": "VARCHAR(100)",
+        "clickup_task_url": "TEXT",
+        "clickup_estado": "VARCHAR(30)",
+        "clickup_error": "TEXT",
+        "clickup_sincronizado_en": "TIMESTAMP",
+    }
+    faltantes = [(nombre, tipo) for nombre, tipo in columnas.items() if nombre not in existentes]
+    if not faltantes:
+        return
+    with engine.begin() as conexion:
+        for nombre, tipo in faltantes:
+            conexion.execute(text(f"ALTER TABLE leads ADD COLUMN {nombre} {tipo}"))
 
 
 def guardar_lead(entrada: dict, calificacion: dict, crm: dict, motor: str) -> Lead:
@@ -160,6 +211,40 @@ def guardar_lead(entrada: dict, calificacion: dict, crm: dict, motor: str) -> Le
         sesion.refresh(lead)
         sesion.expunge(lead)
         return lead
+
+
+def actualizar_clickup(lead_id: int, resultado: dict) -> None:
+    """Guarda trazabilidad de la última sincronización con ClickUp."""
+    with Session(engine) as sesion:
+        lead = sesion.get(Lead, lead_id)
+        if not lead:
+            return
+        lead.clickup_estado = resultado["estado"]
+        lead.clickup_task_id = resultado.get("task_id")
+        lead.clickup_task_url = resultado.get("url")
+        lead.clickup_error = resultado.get("detalle")
+        lead.clickup_sincronizado_en = datetime.now(timezone.utc)
+        asignados = resultado.get("asignados", [])
+        if resultado["estado"] == "creado" and asignados:
+            lead.asesor = ", ".join(item["nombre"] for item in asignados)[:100]
+            lead.rol_asesor = (
+                "Asesor/a comercial · ClickUp"
+                if len(asignados) == 1
+                else "Equipo comercial · ClickUp"
+            )
+        sesion.commit()
+
+
+def numero_asignacion_comercial(lead_id: int) -> int:
+    """Posición del lead entre los accionables reales; excluye datos semilla."""
+    with Session(engine) as sesion:
+        return sesion.scalar(
+            select(func.count(Lead.id)).where(
+                Lead.id <= lead_id,
+                Lead.clasificacion.in_(("HOT", "WARM")),
+                Lead.motor != "semilla",
+            )
+        ) or 1
 
 
 def obtener_lead(lead_id: int) -> Lead | None:

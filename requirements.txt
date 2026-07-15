@@ -4,4 +4,5 @@ uvicorn>=0.34
 pydantic>=2.10
 sqlalchemy>=2.0
 psycopg[binary]>=3.2
+httpx>=0.28
 jinja2>=3.1

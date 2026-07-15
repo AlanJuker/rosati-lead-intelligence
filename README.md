@@ -25,11 +25,12 @@ Demo profesional del sistema descrito en [prompt-calificacion-leads-BANT-RosatiM
 | [clasificador.py](clasificador.py) | Llama a Claude (`claude-opus-4-8`) con **structured outputs**; el total y la clasificación se recalculan en código |
 | [simulador.py](simulador.py) | Calificación por reglas transparentes — permite demo completa **sin** API key |
 | [db.py](db.py) | PostgreSQL en Railway y SQLite como fallback local (SQLAlchemy). Se crea y siembra automáticamente |
+| [clickup.py](clickup.py) | Crea y asigna tareas comerciales para leads HOT/WARM, con prioridad y vencimiento según SLA |
 | [api.py](api.py) | Aplicación FastAPI: vistas web (Jinja2) + API JSON + persistencia |
 | [templates/](templates/), [static/](static/) | Interfaz — tema oscuro de lujo automotriz |
 | [n8n/workflow-calificacion-leads.json](n8n/workflow-calificacion-leads.json) | Workflow n8n importable con routing por clasificación |
 
-**Base de datos:** en Railway usa PostgreSQL mediante `DATABASE_URL`. En local, si esa variable no existe, utiliza SQLite en `data/leads.db`. En ambos casos, una base vacía se siembra automáticamente con 18 leads históricos realistas de [datos_semilla.json](datos_semilla.json), por lo que el demo luce poblado desde el primer despliegue.
+**Base de datos:** en Railway usa PostgreSQL mediante `DATABASE_URL`. En local, si esa variable no existe, utiliza SQLite en `data/leads.db`. La campaña demo incluye 10 leads ficticios de Meta/Instagram (3 HOT, 3 WARM, 2 COLD y 2 DESCARTAR). La versión de semillas permite reemplazar una campaña una sola vez sin borrar los leads nuevos en reinicios posteriores.
 
 **Motores de calificación:** con `ANTHROPIC_API_KEY` configurada, la calificación la hace **Claude** con el prompt BANT completo. Sin key, la experiencia web usa un **simulador de reglas** (marcado como tal en la interfaz) para que el demo nunca se caiga frente a un cliente. El endpoint `POST /calificar-lead` de la spec siempre exige Claude.
 
@@ -55,6 +56,7 @@ python -m unittest discover -s tests -v
 1. **Crear el proyecto**: en [railway.com](https://railway.com) → *New Project* → *Deploy from GitHub repo* → seleccionar este repo. Railway detecta Python y usa el `startCommand` de [railway.json](railway.json) (healthcheck en `/salud` incluido).
 2. **Variables** (pestaña *Variables* del servicio):
    - `ANTHROPIC_API_KEY` = `sk-ant-...` — para que la calificación sea con Claude. Sin ella el demo funciona igual con el simulador.
+   - Variables de ClickUp descritas en la sección siguiente.
 3. **PostgreSQL**: en el canvas del proyecto selecciona *New → Database → PostgreSQL*.
 4. **Conexión**: en las variables del servicio web agrega una referencia:
    - `DATABASE_URL` = `${{Postgres.DATABASE_URL}}`
@@ -63,6 +65,46 @@ python -m unittest discover -s tests -v
 5. **Dominio**: *Settings → Networking → Generate Domain* para obtener la URL pública.
 
 Con eso, la URL pública sirve el panel en `/` y el webhook para n8n/Zapier en `POST /calificar-lead`.
+
+## Integración con ClickUp
+
+Después de guardar cada lead, la aplicación crea una tarea en ClickUp únicamente para
+clasificaciones **HOT** y **WARM**. Un HOT se crea con prioridad urgente y vencimiento en
+2 horas; un WARM, con prioridad alta y vencimiento en 24 horas. Un fallo de ClickUp nunca
+impide guardar el lead en PostgreSQL y queda registrado en su expediente.
+
+Configura estas variables en **Railway → servicio web → Variables**:
+
+| Variable | Obligatoria | Cómo obtenerla |
+|---|---:|---|
+| `CLICKUP_API_TOKEN` | Sí | ClickUp → avatar → **Settings → Apps → API Token → Generate**. Empieza con `pk_`. |
+| `CLICKUP_LIST_ID` | Sí | Abre la Lista comercial; es el número que aparece en la URL después de `/l/` o `/li/`. |
+| `CLICKUP_ASSIGNEES` | Recomendada | Comerciales en formato `id:nombre,id:nombre`. Acepta tantas personas como necesites. |
+| `CLICKUP_ASSIGNMENT_MODE` | No | `round_robin` reparte una tarea a una persona; `all` asigna cada tarea a todos. |
+| `CLICKUP_STATUS` | No | Nombre exacto del estado de la Lista, por ejemplo `to do`. Si se omite, ClickUp usa el estado inicial. |
+| `APP_BASE_URL` | Recomendada | Dominio público del demo, por ejemplo `https://tu-app.up.railway.app`; se incluye en la tarea. |
+
+Para consultar el ID del usuario comercial desde PowerShell:
+
+```powershell
+$token = "pk_..."
+Invoke-RestMethod "https://api.clickup.com/api/v2/team" -Headers @{ Authorization = $token } |
+  ConvertTo-Json -Depth 8
+```
+
+Busca el usuario por nombre o correo dentro de `teams → members → user` y copia su `id`.
+No guardes el token en Git ni en `.env.example`; debe existir solamente como secreto local
+o variable de Railway.
+
+Para Pao y Alan, configura:
+
+```env
+CLICKUP_ASSIGNEES=114110475:Pao Barreno,87456941:Alan Guijarro
+CLICKUP_ASSIGNMENT_MODE=round_robin
+```
+
+Con `round_robin`, cada lead tiene un solo responsable y la carga se distribuye entre los
+comerciales. Para agregar otra persona, añade `,ID:Nombre` al final de la misma variable.
 
 ## Integración con n8n
 

@@ -20,8 +20,9 @@ automotriz, pensada para demos con clientes y desplegada en Railway.
 | `prompt_sistema.md` | Prompt de sistema BANT para Claude. Editable por negocio sin tocar código. |
 | `clasificador.py` | `clasificar_lead(dict) -> CalificacionLead`. SDK `anthropic`, `client.messages.parse()` + `output_format=<Pydantic>` (structured outputs). Modelo `claude-opus-4-8`, thinking adaptativo. Lanza `RuntimeError` si `parsed_output` es None (refusal). |
 | `simulador.py` | `calificar_simulado(dict)` — heurística transparente para demo sin API key, y `asignacion_crm(clasificacion)` — mapeo único clasificación → asesor/etapa/SLA. |
-| `db.py` | PostgreSQL/SQLite + SQLAlchemy 2.0. Modelo `Lead` (entrada + calificación aplanada + asignación + `motor`). Usa `DATABASE_URL` en Railway; sin ella cae a `data/leads.db`. `iniciar_db()` crea tablas y siembra `datos_semilla.json` si está vacía. |
-| `datos_semilla.json` | 18 leads históricos simulados (4 HOT, 5 WARM, 5 COLD, 4 DESCARTAR), sumas consistentes con los umbrales, `motor: "semilla"`. |
+| `clickup.py` | Integración resiliente: crea tareas HOT/WARM, reparte entre `CLICKUP_ASSIGNEES` (round-robin o todos), aplica prioridad y SLA; COLD/DESCARTAR se omiten. |
+| `db.py` | PostgreSQL/SQLite + SQLAlchemy 2.0. Modelo `Lead` (entrada + calificación aplanada + asignación + `motor`). Usa `DATABASE_URL` en Railway; sin ella cae a `data/leads.db`. `iniciar_db()` aplica cada versión de campaña demo una sola vez. |
+| `datos_semilla.json` | 10 leads ficticios de campaña Meta/Instagram (3 HOT, 3 WARM, 2 COLD, 2 DESCARTAR), sumas consistentes, `motor: "semilla"`. |
 | `api.py` | App FastAPI: vistas web (Jinja2: `/`, `/leads`, `/leads/{id}`, `/nuevo`) + API JSON (`/calificar-lead`, `/demo/calificar`, `/api/leads`, `/api/estadisticas`, `/salud`). `/demo` redirige a `/nuevo`. |
 | `templates/`, `static/` | UI. `estilos.css` es el sistema de diseño (tokens en `:root`); `app.js` maneja la página de captura. |
 | `railway.json` / `Procfile` / `.python-version` | Despliegue en Railway: `uvicorn api:app --host 0.0.0.0 --port $PORT`, healthcheck `/salud`. |
@@ -49,7 +50,12 @@ automotriz, pensada para demos con clientes y desplegada en Railway.
    DESCARTAR gris), siempre acompañados de etiqueta de texto — nunca color solo. Los
    gráficos de magnitud usan un solo matiz (dorado). Tokens en `static/estilos.css`.
 8. La base **no se versiona**; lo que se versiona es `datos_semilla.json`. Producción usa
-   PostgreSQL vía `DATABASE_URL`; SQLite es solo el fallback local. No hay migraciones porque es un demo.
+   PostgreSQL vía `DATABASE_URL`; SQLite es solo el fallback local. No hay framework de
+   migraciones; `iniciar_db()` agrega las columnas ClickUp a bases existentes del demo.
+9. **ClickUp nunca bloquea la captura**: primero se persiste el lead y luego se intenta crear
+   la tarea. Todo fallo se registra; solo HOT/WARM se envían. Los secretos y el equipo viven en variables.
+10. `VERSION_SEMILLA` identifica la campaña demo. Cambiarla reemplaza todos los leads una
+    sola vez al desplegar; reinicios con la misma versión conservan los leads nuevos.
 
 ## Estado: qué está HECHO y verificado ✅
 
@@ -58,7 +64,8 @@ automotriz, pensada para demos con clientes y desplegada en Railway.
 - App web completa: panel con métricas y gráficos, pipeline con filtros, expediente,
   calificación en vivo con animaciones. Tema oscuro oro/carbono, responsive.
 - Configuración de Railway (railway.json + Procfile + healthcheck) y PostgreSQL documentado.
-- Pruebas automatizadas de humo con `unittest` (4 casos, sin consumo de Claude).
+- Integración ClickUp para HOT/WARM con trazabilidad visible en el expediente.
+- Pruebas automatizadas con `unittest` (8 casos, sin consumo de Claude ni ClickUp real).
 - Workflow n8n validado como JSON.
 
 ## Estado: qué NO está hecho / pendiente ⏳

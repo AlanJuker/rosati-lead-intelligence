@@ -29,6 +29,7 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field, field_validator
 
 import db
+from clickup import clickup_configurado, crear_tarea_lead
 from clasificador import CalificacionLead, clasificar_lead
 from simulador import asignacion_crm, calificar_simulado
 
@@ -109,9 +110,38 @@ def _calificar_resiliente(entrada: dict) -> tuple[CalificacionLead, str]:
     return calificar_simulado(entrada), "simulador"
 
 
-def _persistir(entrada: dict, calificacion: CalificacionLead, motor: str) -> db.Lead:
+def _persistir_y_enrutar(
+    entrada: dict, calificacion: CalificacionLead, motor: str
+) -> tuple[db.Lead, dict, dict]:
+    """Guarda primero el lead y luego intenta crear su tarea comercial."""
     crm = asignacion_crm(calificacion.clasificacion)
-    return db.guardar_lead(entrada, calificacion.model_dump(), crm, motor)
+    calificacion_dict = calificacion.model_dump()
+    fila = db.guardar_lead(entrada, calificacion_dict, crm, motor)
+    try:
+        resultado_clickup = crear_tarea_lead(
+            entrada,
+            calificacion_dict,
+            crm,
+            fila.id,
+            indice_asignacion=db.numero_asignacion_comercial(fila.id),
+        )
+        db.actualizar_clickup(fila.id, resultado_clickup)
+        asignados = resultado_clickup.get("asignados", [])
+        if resultado_clickup["estado"] == "creado" and asignados:
+            nombres = ", ".join(comercial["nombre"] for comercial in asignados)
+            crm = {
+                **crm,
+                "asesor": nombres,
+                "rol_asesor": (
+                    "Asesor/a comercial · ClickUp"
+                    if len(asignados) == 1
+                    else "Equipo comercial · ClickUp"
+                ),
+            }
+    except Exception as error:
+        log.exception("No se pudo registrar la integración ClickUp del lead %s", fila.id)
+        resultado_clickup = {"estado": "error", "detalle": str(error)}
+    return fila, crm, resultado_clickup
 
 
 # ─────────────────────────── API JSON ───────────────────────────
@@ -135,7 +165,7 @@ def calificar_lead_spec(lead: LeadEntrada) -> CalificacionLead:
         raise HTTPException(status_code=503, detail="Sin conexión con la API de Anthropic")
     except RuntimeError as error:
         raise HTTPException(status_code=502, detail=str(error))
-    _persistir(lead.model_dump(), calificacion, "claude")
+    _persistir_y_enrutar(lead.model_dump(), calificacion, "claude")
     return calificacion
 
 
@@ -143,11 +173,13 @@ def calificar_lead_spec(lead: LeadEntrada) -> CalificacionLead:
 def calificar_demo(lead: LeadEntrada) -> dict:
     """Simulador sin servicios externos (compatibilidad con la demo original)."""
     calificacion = calificar_simulado(lead.model_dump())
-    fila = _persistir(lead.model_dump(), calificacion, "simulador")
+    fila, crm, resultado_clickup = _persistir_y_enrutar(
+        lead.model_dump(), calificacion, "simulador"
+    )
     return {
         "calificacion": calificacion.model_dump(),
-        "crm": {"plataforma": "CRM conectado", "estado": "Lead creado y sincronizado",
-                **asignacion_crm(calificacion.clasificacion)},
+        "crm": {"plataforma": "Gestión comercial", "estado": "Lead creado", **crm},
+        "clickup": resultado_clickup,
         "modo": "demo",
         "lead_db_id": fila.id,
     }
@@ -157,13 +189,15 @@ def calificar_demo(lead: LeadEntrada) -> dict:
 def crear_lead(lead: LeadEntrada) -> dict:
     """Califica con el mejor motor disponible, persiste y devuelve todo el flujo."""
     calificacion, motor = _calificar_resiliente(lead.model_dump())
-    fila = _persistir(lead.model_dump(), calificacion, motor)
+    fila, crm, resultado_clickup = _persistir_y_enrutar(
+        lead.model_dump(), calificacion, motor
+    )
     return {
         "id": fila.id,
         "motor": motor,
         "calificacion": calificacion.model_dump(),
-        "crm": {"plataforma": "CRM conectado", "estado": "Lead creado y sincronizado",
-                **asignacion_crm(calificacion.clasificacion)},
+        "crm": {"plataforma": "Gestión comercial", "estado": "Lead creado", **crm},
+        "clickup": resultado_clickup,
     }
 
 
@@ -183,6 +217,8 @@ def listar_leads_json(
             "showroom_recomendado": lead.showroom_recomendado,
             "asesor": lead.asesor,
             "motor": lead.motor,
+            "clickup_estado": lead.clickup_estado,
+            "clickup_task_url": lead.clickup_task_url,
         }
         for lead in db.listar_leads(clasificacion, fuente, q)
     ]
@@ -200,6 +236,7 @@ def salud() -> dict:
         "leads": db.estadisticas()["total"],
         "motor_claude": motor_claude_disponible(),
         "base_datos": db.TIPO_BD,
+        "clickup_configurado": clickup_configurado(),
     }
 
 

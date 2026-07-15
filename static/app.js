@@ -97,7 +97,7 @@ formulario.addEventListener("submit", async (evento) => {
   }
 });
 
-function mostrarResultado({ id, motor, calificacion, crm }) {
+function mostrarResultado({ id, motor, calificacion, crm, clickup }) {
   $("resultado-vacio").style.display = "none";
   const resultado = $("resultado");
   resultado.classList.add("visible");
@@ -139,6 +139,20 @@ function mostrarResultado({ id, motor, calificacion, crm }) {
   $("res-sla").textContent = crm.sla;
   $("res-showroom").textContent = calificacion.showroom_recomendado;
   $("res-registro").textContent = calificacion.lead_id_sugerido;
+  const estadosClickUp = {
+    creado: "Tarea creada y asignada",
+    omitido: "No aplica para esta clasificación",
+    no_configurado: "Pendiente de configuración",
+    error: "No se pudo sincronizar",
+  };
+  $("res-clickup-estado").textContent = estadosClickUp[clickup?.estado] || "Sin información";
+  const enlaceClickUp = $("res-clickup-enlace");
+  if (clickup?.url) {
+    enlaceClickUp.href = clickup.url;
+    enlaceClickUp.hidden = false;
+  } else {
+    enlaceClickUp.hidden = true;
+  }
   $("res-enlace").href = `/leads/${id}`;
 
   marcarPasos(2);

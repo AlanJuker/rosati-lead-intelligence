@@ -78,6 +78,13 @@
         <div><span>Showroom</span><b>{{ lead.showroom_recomendado }}</b></div>
         <div><span>Registro</span><b>{{ lead.lead_id_sugerido }}</b></div>
       </div>
+      {% if lead.clickup_estado %}
+      <div class="clickup-estado">
+        <span>ClickUp</span>
+        <b>{{ {'creado': 'Tarea creada y asignada', 'omitido': 'No aplica', 'no_configurado': 'Pendiente de configuración', 'error': 'Error de sincronización'}.get(lead.clickup_estado, lead.clickup_estado) }}</b>
+        {% if lead.clickup_task_url %}<a href="{{ lead.clickup_task_url }}" target="_blank" rel="noopener">Abrir tarea →</a>{% endif %}
+      </div>
+      {% endif %}
     </div>
 
     <div class="tarjeta">
