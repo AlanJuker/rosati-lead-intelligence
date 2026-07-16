@@ -10,7 +10,7 @@ Implementación del sistema descrito en `prompt-calificacion-leads-BANT-RosatiMo
 Rosati Motors es un concesionario de ultra-lujo en Ecuador (Lamborghini, Maserati, McLaren).
 La app recibe leads de Instagram/Facebook Ads o formulario web, los califica con metodología
 BANT (Claude), los persiste en PostgreSQL (SQLite local) y los enruta al equipo comercial. Incluye una interfaz
-web completa (panel, pipeline, expediente, calificación en vivo) con tema oscuro de lujo
+web completa (panel, pipeline, expediente, calificación en vivo) con tema claro de galería de lujo
 automotriz, pensada para demos con clientes y desplegada en Railway.
 
 ## Arquitectura y archivos
@@ -46,7 +46,11 @@ automotriz, pensada para demos con clientes y desplegada en Railway.
    JSON de salida; la columna en DB es `senales_clave` por compatibilidad SQL).
 6. El SDK lanza `TypeError` (no `AuthenticationError`) cuando no hay ninguna credencial;
    `api.py` maneja ambos por separado. No eliminar el `except TypeError`.
-7. **Colores de clasificación = estados semánticos** (HOT rojo, WARM ámbar, COLD azul,
+7. **Dirección estética: galería de lujo en CLARO** — marfil `#F6F4EF`, tarjetas blancas,
+   display serif Fraunces, acento bronce `#8C6D2F` contenido, CTA negro, tarjeta CRM en
+   carbón como ancla de contraste. El cliente rechazó explícitamente el tema oscuro
+   negro+dorado+rojo ("ambiente de cabaret, no elegante"): NO volver a un tema oscuro.
+8. **Colores de clasificación = estados semánticos** (HOT rojo, WARM ámbar, COLD azul,
    DESCARTAR gris), siempre acompañados de etiqueta de texto — nunca color solo. Los
    gráficos de magnitud usan un solo matiz (dorado). Tokens en `static/estilos.css`.
 8. La base **no se versiona**; lo que se versiona es `datos_semilla.json`. Producción usa
@@ -62,7 +66,7 @@ automotriz, pensada para demos con clientes y desplegada en Railway.
 - Clasificador con Claude (structured outputs) + simulador de reglas + validador probado.
 - PostgreSQL en Railway, SQLite local, siembra automática, CRUD y agregados.
 - App web completa: panel con métricas y gráficos, pipeline con filtros, expediente,
-  calificación en vivo con animaciones. Tema oscuro oro/carbono, responsive.
+  calificación en vivo con animaciones. Tema claro marfil/bronce (galería de lujo), responsive.
 - Configuración de Railway (railway.json + Procfile + healthcheck) y PostgreSQL documentado.
 - Integración ClickUp para HOT/WARM con trazabilidad visible en el expediente.
 - Pruebas automatizadas con `unittest` (9 casos, sin consumo de Claude ni ClickUp real).
