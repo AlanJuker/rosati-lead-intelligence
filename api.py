@@ -283,12 +283,25 @@ def estadisticas_json() -> dict:
 
 @app.get("/salud")
 def salud() -> dict:
+    # Los campos *_presente reportan solo si la variable llegó al proceso
+    # (nunca su valor): distinguen "variable no aplicada al deployment"
+    # de "variable llegó pero el código la ignora".
     return {
         "estado": "ok",
         "leads": db.estadisticas()["total"],
         "motor_claude": motor_claude_disponible(),
         "base_datos": db.TIPO_BD,
         "clickup_configurado": clickup_configurado(),
+        "variables_recibidas": {
+            "DATABASE_URL": bool(os.environ.get("DATABASE_URL")),
+            "ANTHROPIC_API_KEY": bool(os.environ.get("ANTHROPIC_API_KEY")),
+            "CLICKUP_API_TOKEN": bool(os.environ.get("CLICKUP_API_TOKEN")),
+            "CLICKUP_LIST_ID": bool(os.environ.get("CLICKUP_LIST_ID")),
+            "CLICKUP_ASSIGNEES": bool(os.environ.get("CLICKUP_ASSIGNEES")),
+        },
+        "servicio": os.environ.get("RAILWAY_SERVICE_NAME"),
+        "entorno": os.environ.get("RAILWAY_ENVIRONMENT_NAME"),
+        "commit": (os.environ.get("RAILWAY_GIT_COMMIT_SHA") or "")[:7] or None,
     }
 
 

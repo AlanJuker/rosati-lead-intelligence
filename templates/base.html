@@ -12,6 +12,7 @@
   <link rel="stylesheet" href="/static/estilos.css">
 </head>
 <body>
+  <a class="saltar" href="#contenido">Saltar al contenido</a>
   <header class="barra">
     <a class="marca" href="/">
       <span class="marca-icono" aria-hidden="true">
@@ -21,9 +22,9 @@
       <span class="marca-sub">Lead Intelligence</span>
     </a>
     <nav class="navegacion" aria-label="Principal">
-      <a href="/" class="{{ 'activo' if activo == 'panel' }}">Panel</a>
-      <a href="/leads" class="{{ 'activo' if activo == 'leads' }}">Pipeline</a>
-      <a href="/nuevo" class="{{ 'activo' if activo == 'nuevo' }}">Calificar lead</a>
+      <a href="/" class="{{ 'activo' if activo == 'panel' }}" {% if activo == 'panel' %}aria-current="page"{% endif %}>Panel</a>
+      <a href="/leads" class="{{ 'activo' if activo == 'leads' }}" {% if activo == 'leads' %}aria-current="page"{% endif %}>Pipeline</a>
+      <a href="/nuevo" class="{{ 'activo' if activo == 'nuevo' }}" {% if activo == 'nuevo' %}aria-current="page"{% endif %}>Calificar lead</a>
       <a href="/docs" target="_blank" rel="noopener">API</a>
     </nav>
     <div class="motor {{ 'motor-ia' if motor_claude else 'motor-sim' }}"
@@ -33,7 +34,7 @@
     </div>
   </header>
 
-  <main class="contenido">
+  <main class="contenido" id="contenido">
     {% block contenido %}{% endblock %}
   </main>
 

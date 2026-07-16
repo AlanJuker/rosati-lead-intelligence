@@ -47,16 +47,13 @@ class DemoTestCase(unittest.TestCase):
     def test_arranque_siembra_y_renderiza_vistas(self) -> None:
         salud = self.cliente.get("/salud")
         self.assertEqual(salud.status_code, 200)
-        self.assertEqual(
-            salud.json(),
-            {
-                "estado": "ok",
-                "leads": 10,
-                "motor_claude": False,
-                "base_datos": "sqlite",
-                "clickup_configurado": False,
-            },
-        )
+        cuerpo_salud = salud.json()
+        self.assertEqual(cuerpo_salud["estado"], "ok")
+        self.assertEqual(cuerpo_salud["leads"], 10)
+        self.assertFalse(cuerpo_salud["motor_claude"])
+        self.assertEqual(cuerpo_salud["base_datos"], "sqlite")
+        self.assertFalse(cuerpo_salud["clickup_configurado"])
+        self.assertFalse(cuerpo_salud["variables_recibidas"]["DATABASE_URL"])
         self.assertEqual(self.cliente.get("/").status_code, 200)
         self.assertEqual(self.cliente.get("/leads").status_code, 200)
         self.assertEqual(self.cliente.get("/leads/1").status_code, 200)

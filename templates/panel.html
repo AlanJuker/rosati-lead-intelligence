@@ -84,7 +84,7 @@
   </div>
 </section>
 
-<section class="rejilla-graficos" style="grid-template-columns: 1fr .38fr;">
+<section class="rejilla-graficos rejilla-inferior">
   <div class="tarjeta">
     <h2>Leads recientes</h2>
     <p class="subtitulo">Los últimos ingresos al pipeline</p>
@@ -95,13 +95,15 @@
         </thead>
         <tbody>
           {% for lead in recientes %}
-          <tr class="fila-enlace" onclick="location.href='/leads/{{ lead.id }}'">
-            <td class="celda-nombre">{{ lead.nombre }}<small>{{ lead.fecha }}</small></td>
-            <td class="silencio">{{ lead.fuente }}</td>
-            <td>{{ lead.modelo_interes or '—' }}</td>
-            <td class="celda-puntaje">{{ lead.puntaje_total }}<small>/100</small></td>
-            <td><span class="pastilla {{ lead.clasificacion }}">{{ lead.clasificacion }}</span></td>
-            <td><a class="ver" href="/leads/{{ lead.id }}">Ver →</a></td>
+          <tr class="fila-enlace" tabindex="0" role="link"
+              onclick="location.href='/leads/{{ lead.id }}'"
+              onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();location.href='/leads/{{ lead.id }}'}">
+            <td class="celda-nombre"><a href="/leads/{{ lead.id }}">{{ lead.nombre }}</a><small>{{ lead.fecha }}</small></td>
+            <td class="silencio" data-etiqueta="Fuente">{{ lead.fuente }}</td>
+            <td data-etiqueta="Modelo">{{ lead.modelo_interes or '—' }}</td>
+            <td class="celda-puntaje" data-etiqueta="BANT">{{ lead.puntaje_total }}<small>/100</small></td>
+            <td data-etiqueta="Clasificación"><span class="pastilla {{ lead.clasificacion }}">{{ lead.clasificacion }}</span></td>
+            <td class="celda-ver"><a class="ver" href="/leads/{{ lead.id }}">Ver expediente →</a></td>
           </tr>
           {% endfor %}
         </tbody>
@@ -121,10 +123,10 @@
     </div>
     <p class="subtitulo" style="margin: 22px 0 10px;">Enrutamiento activo</p>
     <div class="lista-fuentes">
-      <div class="item"><span>🔴 HOT → Asesora senior</span><b>&lt; 2 h</b></div>
-      <div class="item"><span>🟠 WARM → Asesora comercial</span><b>&lt; 24 h</b></div>
-      <div class="item"><span>🔵 COLD → Nutrición</span><b>14 días</b></div>
-      <div class="item"><span>⚪ DESCARTAR → Remarketing</span><b>—</b></div>
+      <div class="item"><span><i class="punto-estado HOT" aria-hidden="true"></i>HOT → Asesoría senior</span><b>&lt; 2 h</b></div>
+      <div class="item"><span><i class="punto-estado WARM" aria-hidden="true"></i>WARM → Asesoría comercial</span><b>&lt; 24 h</b></div>
+      <div class="item"><span><i class="punto-estado COLD" aria-hidden="true"></i>COLD → Nutrición</span><b>14 días</b></div>
+      <div class="item"><span><i class="punto-estado DESCARTAR" aria-hidden="true"></i>DESCARTAR → Remarketing</span><b>—</b></div>
     </div>
   </div>
 </section>

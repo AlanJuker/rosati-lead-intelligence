@@ -42,19 +42,21 @@
       </thead>
       <tbody>
         {% for lead in leads %}
-        <tr class="fila-enlace" onclick="location.href='/leads/{{ lead.id }}'">
-          <td class="celda-nombre">{{ lead.nombre }}<small>{{ lead.fecha }}</small></td>
-          <td class="silencio">{{ lead.fuente }}</td>
-          <td>{{ lead.modelo_interes or '—' }}</td>
-          <td class="silencio">{{ lead.showroom_recomendado }}</td>
-          <td class="celda-puntaje">{{ lead.puntaje_total }}<small>/100</small></td>
-          <td><span class="pastilla {{ lead.clasificacion }}">{{ lead.clasificacion }}</span></td>
-          <td>{{ lead.asesor }}</td>
-          <td><span class="insignia-motor {{ 'claude' if lead.motor == 'claude' }}">{{ {'claude': '✦ Claude', 'simulador': 'Simulador', 'semilla': 'Histórico'}[lead.motor] }}</span></td>
-          <td><a class="ver" href="/leads/{{ lead.id }}">Ver →</a></td>
+        <tr class="fila-enlace" tabindex="0" role="link"
+            onclick="location.href='/leads/{{ lead.id }}'"
+            onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();location.href='/leads/{{ lead.id }}'}">
+          <td class="celda-nombre"><a href="/leads/{{ lead.id }}">{{ lead.nombre }}</a><small>{{ lead.fecha }}</small></td>
+          <td class="silencio" data-etiqueta="Fuente">{{ lead.fuente }}</td>
+          <td data-etiqueta="Modelo">{{ lead.modelo_interes or '—' }}</td>
+          <td class="silencio" data-etiqueta="Showroom">{{ lead.showroom_recomendado }}</td>
+          <td class="celda-puntaje" data-etiqueta="BANT">{{ lead.puntaje_total }}<small>/100</small></td>
+          <td data-etiqueta="Clasificación"><span class="pastilla {{ lead.clasificacion }}">{{ lead.clasificacion }}</span></td>
+          <td data-etiqueta="Asignado a">{{ lead.asesor }}</td>
+          <td data-etiqueta="Motor"><span class="insignia-motor {{ 'claude' if lead.motor == 'claude' }}">{{ {'claude': '✦ Claude', 'simulador': 'Simulador', 'semilla': 'Histórico'}[lead.motor] }}</span></td>
+          <td class="celda-ver"><a class="ver" href="/leads/{{ lead.id }}">Ver expediente →</a></td>
         </tr>
         {% else %}
-        <tr><td colspan="9" class="vacio-tabla">No hay leads que coincidan con los filtros.</td></tr>
+        <tr class="fila-vacia"><td colspan="9" class="vacio-tabla">No hay leads que coincidan con los filtros.</td></tr>
         {% endfor %}
       </tbody>
     </table>
