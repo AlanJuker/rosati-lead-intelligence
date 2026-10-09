@@ -1,6 +1,6 @@
 # Rosati Motors · Lead Intelligence — Calificación de Leads BANT
 
-Demo profesional del sistema descrito en [prompt-calificacion-leads-BANT-RosatiMotors (2).md](<prompt-calificacion-leads-BANT-RosatiMotors (2).md>): una aplicación web que recibe leads de Instagram/Facebook Ads o formulario web, los califica con metodología BANT usando Claude, los guarda en una base de datos y los enruta al asesor correcto — con panel de métricas, pipeline filtrable y calificación en vivo.
+Demo profesional del sistema descrito en [especificacion-bant.md](especificacion-bant.md): una aplicación web que recibe leads de Instagram/Facebook Ads o formulario web, los califica con metodología BANT usando Claude, los guarda en una base de datos y los enruta al asesor correcto — con panel de métricas, pipeline filtrable y calificación en vivo.
 
 **Lista para desplegar en Railway** (ver sección más abajo).
 

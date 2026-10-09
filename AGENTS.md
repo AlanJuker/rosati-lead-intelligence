@@ -5,7 +5,7 @@ Guía para agentes de código (Codex, Claude Code, etc.) que trabajen en este re
 
 ## Qué es este proyecto
 
-Implementación del sistema descrito en `prompt-calificacion-leads-BANT-RosatiMotors (2).md`
+Implementación del sistema descrito en `especificacion-bant.md`
 (el documento de especificación original — **no editarlo**, es la fuente de requisitos).
 Rosati Motors es un concesionario de ultra-lujo en Ecuador (Lamborghini, Maserati, McLaren).
 La app recibe leads de Instagram/Facebook Ads o formulario web, los califica con metodología
