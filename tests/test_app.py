@@ -104,8 +104,8 @@ class DemoTestCase(unittest.TestCase):
 
     def test_sincroniza_seis_semillas_clickup_una_sola_vez(self) -> None:
         comerciales = [
-            {"id": 114110475, "nombre": "Pao Barreno"},
-            {"id": 87456941, "nombre": "Alan Guijarro"},
+            {"id": 1000001, "nombre": "Andrea Salazar"},
+            {"id": 1000002, "nombre": "Alan Guijarro"},
         ]
 
         def crear_simulado(_entrada, _calificacion, _crm, lead_id, **opciones):
@@ -120,7 +120,7 @@ class DemoTestCase(unittest.TestCase):
         entorno = {
             "CLICKUP_API_TOKEN": "pk_prueba",
             "CLICKUP_LIST_ID": "123456",
-            "CLICKUP_ASSIGNEES": "114110475:Pao Barreno,87456941:Alan Guijarro",
+            "CLICKUP_ASSIGNEES": "1000001:Andrea Salazar,1000002:Alan Guijarro",
         }
         with patch.dict(os.environ, entorno, clear=False):
             with patch.object(api, "crear_tarea_lead", side_effect=crear_simulado) as crear:
@@ -132,7 +132,7 @@ class DemoTestCase(unittest.TestCase):
         self.assertEqual(crear.call_count, 6)
         self.assertEqual(
             [db.obtener_lead(lead_id).asesor for lead_id in range(1, 7)],
-            ["Pao Barreno", "Alan Guijarro"] * 3,
+            ["Andrea Salazar", "Alan Guijarro"] * 3,
         )
 
     def test_normaliza_url_de_railway_para_psycopg_3(self) -> None:

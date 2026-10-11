@@ -100,10 +100,10 @@ Busca el usuario por nombre o correo dentro de `teams → members → user` y co
 No guardes el token en Git ni en `.env.example`; debe existir solamente como secreto local
 o variable de Railway.
 
-Para Pao y Alan, configura:
+Para repartir los leads entre dos asesores, configura:
 
 ```env
-CLICKUP_ASSIGNEES=114110475:Pao Barreno,87456941:Alan Guijarro
+CLICKUP_ASSIGNEES=1000001:Andrea Salazar,1000002:Alan Guijarro
 CLICKUP_ASSIGNMENT_MODE=round_robin
 ```
 

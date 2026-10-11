@@ -63,7 +63,7 @@ class ClickUpTestCase(unittest.TestCase):
         self.assertEqual(payload_recibido["status"], "to do")
         self.assertIn("https://demo.example.com/leads/19", payload_recibido["markdown_content"])
 
-    def test_reparte_dos_leads_entre_pao_y_alan(self) -> None:
+    def test_reparte_dos_leads_entre_dos_asesores(self) -> None:
         asignaciones = []
 
         def responder(request: httpx.Request) -> httpx.Response:
@@ -77,7 +77,7 @@ class ClickUpTestCase(unittest.TestCase):
         entorno = {
             "CLICKUP_API_TOKEN": "pk_prueba",
             "CLICKUP_LIST_ID": "123456",
-            "CLICKUP_ASSIGNEES": "114110475:Pao Barreno,87456941:Alan Guijarro",
+            "CLICKUP_ASSIGNEES": "1000001:Andrea Salazar,1000002:Alan Guijarro",
             "CLICKUP_ASSIGNMENT_MODE": "round_robin",
         }
         with patch.dict(os.environ, entorno, clear=False):
@@ -89,8 +89,8 @@ class ClickUpTestCase(unittest.TestCase):
                     ENTRADA, CALIFICACION, CRM, lead_db_id=2, client=cliente
                 )
 
-        self.assertEqual(asignaciones, [[114110475], [87456941]])
-        self.assertEqual(primero["asignados"][0]["nombre"], "Pao Barreno")
+        self.assertEqual(asignaciones, [[1000001], [1000002]])
+        self.assertEqual(primero["asignados"][0]["nombre"], "Andrea Salazar")
         self.assertEqual(segundo["asignados"][0]["nombre"], "Alan Guijarro")
 
     def test_omite_lead_cold_sin_hacer_peticion(self) -> None:
